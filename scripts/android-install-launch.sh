@@ -5,8 +5,11 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PKG="${ANDROID_APP_ID:-com.example.piximons}"
-ACTIVITY="${ANDROID_LAUNCH_ACTIVITY:-com.example.piximons.MainActivity}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PKG="${ANDROID_APP_ID:-}"
+if [ -z "$PKG" ]; then
+  PKG="$("$HERE/android-app-id.sh" "$ROOT")"
+fi
 
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
@@ -29,11 +32,14 @@ fi
 echo "Installing :app:installDebug ..."
 ./gradlew :app:installDebug --console=plain
 
-echo "Launching $PKG/$ACTIVITY ..."
-# am start returns 0 even on "Error type 3" — inspect stdout.
-out="$(adb shell am start -n "$PKG/$ACTIVITY" 2>&1 || true)"
+echo "Launching launcher for $PKG ..."
+if [ -n "${ANDROID_LAUNCH_ACTIVITY:-}" ]; then
+  out="$(adb shell am start -n "$PKG/${ANDROID_LAUNCH_ACTIVITY}" 2>&1 || true)"
+else
+  out="$(adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 2>&1 || true)"
+fi
 printf '%s\n' "$out"
-if printf '%s\n' "$out" | grep -Eiq 'Error|does not exist|Exception|Unable to resolve'; then
+if printf '%s\n' "$out" | grep -Eiq 'Error type|does not exist|Exception|Unable to resolve|No activities found|monkey aborted'; then
   echo "Launch failed." >&2
   exit 1
 fi

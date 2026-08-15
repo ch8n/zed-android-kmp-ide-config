@@ -76,7 +76,8 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 | `.zed/tasks.json` | Install+launch, pidcat, pickers, tests, clean |
 | `scripts/android-device-picker.sh` | ↑↓ AVD/USB: start/stop, logcat, new/delete AVD |
 | `scripts/android-install-launch.sh` | `:app:installDebug` then launch (fails if `am start` errors) |
-| `scripts/pidcat-app.sh` | Colored pidcat (fixes Python 3 `print(bytes)` + `TERM=dumb`) |
+| `scripts/android-app-id.sh` | Reads `applicationId` from this project |
+| `scripts/pidcat-app.sh` | Colored logcat: tag (empty=all) then multi-select levels |
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
 
@@ -105,22 +106,23 @@ Defaults match Homebrew on Apple Silicon:
 - `JAVA_HOME` → `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
 - `ANDROID_HOME` / `ANDROID_SDK_ROOT` → `/opt/homebrew/share/android-commandlinetools`
 
-App id used by install + pidcat: `com.example.piximons`
+App id is read from the project's `applicationId` in Gradle (`app/`, `androidApp/`, or `composeApp/`). Override with `ANDROID_APP_ID` if needed.
 
 ```bash
-ANDROID_APP_ID=com.your.app scripts/android-install-launch.sh
-PIDCAT_PACKAGE=com.your.app scripts/pidcat-app.sh
+scripts/android-app-id.sh
+scripts/pidcat-app.sh -t OverlayService -l WE
 ```
 
 ## Picker keys
 
 **Devices:** ↑↓ · Enter · `n` new AVD · `d` delete · `r` refresh · `q` quit  
 **Gradle:** type to filter · ↑↓ · Enter · Ctrl+R refresh · Esc quit  
-**iOS:** ↑↓ · Enter (boot/shutdown) · `r` · `q` — existing `xcrun simctl` only
+**iOS:** ↑↓ · Enter (boot/shutdown) · `r` · `q` — existing `xcrun simctl` only  
+**Logcat:** type tag (empty = all, `apple|banana` = contains any) · Enter · Space toggle levels · Enter start · q cancel
 
 ## Optional tools
 
-- Colored logcat via `scripts/pidcat-app.py` (`adb logcat -v color`). Homebrew pidcat 2.1.0 is optional and broken on Python 3.
+- Colored logcat via `scripts/pidcat-app.py` — tag (empty=all), then multi-select levels. App id from Gradle.
 - `emulator` + `adb` on `PATH` (from `ANDROID_HOME`)
 - Xcode only if you already have it
 

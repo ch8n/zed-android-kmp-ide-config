@@ -2,7 +2,12 @@
 # Arrow-key AVD + adb picker (↑↓ move, Enter select). macOS bash 3.2 OK.
 set -u
 
-PKG="${ANDROID_APP_ID:-com.example.piximons}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PKG="${ANDROID_APP_ID:-}"
+if [ -z "$PKG" ]; then
+  PKG="$("$HERE/android-app-id.sh" 2>/dev/null || true)"
+fi
+PKG="${PKG:-}"
 JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
 ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 export JAVA_HOME ANDROID_HOME ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
@@ -578,12 +583,7 @@ run_logcat() {
   cleanup
   STTY_ORIG=""
   printf '%s%s' "$c_clear" "$c_show"
-  echo "pidcat $PKG  ($serial)   Ctrl+C to stop"
-  echo
-  if need_cmd pidcat; then
-    exec pidcat -s "$serial" -c "$PKG"
-  fi
-  exec adb -s "$serial" logcat -v color
+  exec python3 "$HERE/pidcat-app.py" -s "$serial" -c
 }
 
 clamp_cur() {
