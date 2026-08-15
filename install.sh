@@ -1,27 +1,31 @@
 #!/usr/bin/env bash
-# Install Zed Android/KMP config + pickers into a project.
+# Install Zed Android+KMP config: user settings (kotlin-lsp), project .zed, pickers.
 # Usage:
 #   ./install.sh [project-dir]
 #   ./install.sh --force ~/code/my-app
-#   curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-ide-config/main/install.sh | bash -s -- [project-dir]
+#   ./install.sh --user-only
+#   curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-kmp-ide-config/main/install.sh | bash -s -- --force [project-dir]
 #
 # Does not install Xcode, Android SDK, or JDK. Optional: Homebrew pidcat.
 set -euo pipefail
 
-REPO_SLUG="ch8n/zed-android-ide-config"
+REPO_SLUG="ch8n/zed-android-kmp-ide-config"
 REPO_URL="https://github.com/${REPO_SLUG}.git"
-RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/main"
 FORCE=0
+DO_USER=1
+DO_PROJECT=1
 TARGET=""
 
 usage() {
   cat <<EOF
-install.sh — copy Zed Android/KMP tasks, settings, and picker scripts
+install.sh — Zed Android+KMP: kotlin-lsp settings, tasks, picker scripts
 
-Usage:  install.sh [--force] [project-dir]
+Usage:  install.sh [--force] [--no-user] [--user-only] [project-dir]
 
   project-dir   Android/KMP repo root (default: current directory)
   --force       overwrite without prompting (still writes .bak)
+  --no-user     do not write ~/.config/zed/settings.json
+  --user-only   only write user settings (skip project files)
 
 Does not install or update Xcode / Android SDK / JDK.
 If Homebrew is present and pidcat is missing, installs pidcat.
@@ -32,6 +36,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     -f|--force) FORCE=1; shift ;;
+    --no-user) DO_USER=0; shift ;;
+    --user-only) DO_PROJECT=0; DO_USER=1; shift ;;
     --) shift; break ;;
     -*) echo "unknown flag: $1" >&2; usage >&2; exit 2 ;;
     *) TARGET="$1"; shift ;;
@@ -41,7 +47,12 @@ done
 if [ -z "$TARGET" ]; then
   TARGET="$PWD"
 fi
-TARGET="$(cd "$TARGET" && pwd)"
+if [ "$DO_PROJECT" -eq 1 ]; then
+  TARGET="$(cd "$TARGET" && pwd)"
+fi
+
+USER_ZED="${HOME}/.config/zed"
+USER_SETTINGS="${USER_ZED}/settings.json"
 
 confirm() {
   [ "$FORCE" -eq 1 ] && return 0
@@ -57,20 +68,19 @@ confirm() {
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-# Resolve source tree: this clone, or fetch into a temp dir.
 SRC=""
 CLEANUP_SRC=""
 resolve_src() {
   local here
   if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$here/.zed/tasks.json" ] && [ -f "$here/scripts/android-device-picker.sh" ]; then
+    if [ -f "$here/.zed/tasks.json" ] && [ -f "$here/user/settings.json" ]; then
       SRC="$here"
       return 0
     fi
   fi
   if need_cmd git; then
-    CLEANUP_SRC="$(mktemp -d "${TMPDIR:-/tmp}/zed-android-ide-config.XXXXXX")"
+    CLEANUP_SRC="$(mktemp -d "${TMPDIR:-/tmp}/zed-android-kmp-ide-config.XXXXXX")"
     echo "cloning ${REPO_URL} …"
     git clone --depth 1 "$REPO_URL" "$CLEANUP_SRC"
     SRC="$CLEANUP_SRC"
@@ -87,7 +97,22 @@ backup() {
   echo "  backup  ${f} -> ${f}.bak"
 }
 
-install_files() {
+install_user_settings() {
+  mkdir -p "$USER_ZED"
+  if [ -e "$USER_SETTINGS" ]; then
+    if ! confirm "overwrite ${USER_SETTINGS} (kotlin-lsp, docks, fonts, theme, env) ?"; then
+      echo "skip user settings (kept existing)"
+      return 0
+    fi
+    backup "$USER_SETTINGS"
+  fi
+  cp "$SRC/user/settings.json" "$USER_SETTINGS"
+  echo "  wrote   $USER_SETTINGS"
+  echo "  kotlin  kotlin-lsp enabled, fwcd kotlin-language-server disabled"
+  echo "  ext     auto_install html, kotlin, toml"
+}
+
+install_project() {
   mkdir -p "$TARGET/.zed" "$TARGET/scripts"
 
   if [ -e "$TARGET/.zed/tasks.json" ] || [ -e "$TARGET/.zed/settings.json" ]; then
@@ -151,7 +176,7 @@ check_env() {
   elif [ -x /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home/bin/java ]; then
     echo "JAVA_HOME default Homebrew openjdk@17 is present"
   else
-    echo "JAVA_HOME not found — edit .zed/settings.json to match your JDK"
+    echo "JAVA_HOME not found — edit user/settings.json and .zed/settings.json"
   fi
 
   local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}}"
@@ -173,18 +198,28 @@ check_env() {
 }
 
 main() {
-  echo "target    $TARGET"
+  if [ "$DO_PROJECT" -eq 1 ]; then
+    echo "target    $TARGET"
+  else
+    echo "target    (user settings only)"
+  fi
   resolve_src
   echo "source    $SRC"
-  install_files
-  maybe_pidcat
+  if [ "$DO_USER" -eq 1 ]; then
+    install_user_settings
+  fi
+  if [ "$DO_PROJECT" -eq 1 ]; then
+    install_project
+    maybe_pidcat
+  fi
   check_env
   if [ -n "$CLEANUP_SRC" ]; then
     rm -rf "$CLEANUP_SRC"
   fi
   echo
-  echo "done. In Zed: Cmd+Shift+R → Gradle: Tasks / Android: Devices & emulators"
-  echo "edit .zed/settings.json if JAVA_HOME / ANDROID_HOME differ on this machine"
+  echo "done. Restart Zed once so kotlin-lsp attaches."
+  echo "Then Cmd+Shift+R → Gradle: Tasks / Android: Devices & emulators"
+  echo "edit JAVA_HOME / ANDROID_HOME in ~/.config/zed/settings.json if needed"
   echo "edit package id in .zed/tasks.json (default com.example.piximons)"
 }
 
