@@ -104,27 +104,32 @@ def index_recomp_rows(rows, app_prefix=""):
     return by_name, by_file
 
 
-def minus_baseline(cur, base):
-    if not base:
-        return cur
-    out = {}
-    for k, n in cur.items():
-        d = n - base.get(k, 0)
-        if d > 0:
-            out[k] = d
-    return out
-
-
-def recomp_count_for(node, by_name, by_file):
-    name = getattr(node, "composable_name", None)
+def _own_recomp_count(name, by_name):
     if not name:
         return None
     short = _simple_name(name)
-    if short in _SKIP_COUNT_NAMES:
+    if not short or short in _SKIP_COUNT_NAMES:
         return None
-    # Definition-level total (all instances share a compiler key). Do not
-    # key off call-site file — that is never in the tracer map.
     return by_name.get(short)
+
+
+def recomp_count_for(node, by_name, by_file):
+    """App composable's own tracer total, else nearest ancestor's.
+
+    Foundation calls (Text/Row/Spacer) share one process-wide compiler key —
+    never show that. They recompose with the enclosing @Composable, so
+    inherit that parent's count.
+    """
+    own = _own_recomp_count(getattr(node, "composable_name", None), by_name)
+    if own is not None:
+        return own
+    parent = getattr(node, "parent", None)
+    while parent is not None:
+        inherited = _own_recomp_count(getattr(parent, "composable_name", None), by_name)
+        if inherited is not None:
+            return inherited
+        parent = getattr(parent, "parent", None)
+    return None
 
 
 def find_project_root():
@@ -832,8 +837,6 @@ def run_tui(stdscr):
     recomp_ok = bool(RECOMP.get("ok"))
     recomp_err = RECOMP.get("err") or ""
     by_name, by_file = {}, {}
-    base_name, base_file = {}, {}
-    have_baseline = False
     last_snap = 0.0
     last_paint_sig = None
     app_prefix = (recomp_pkg or "").strip()
@@ -893,14 +896,7 @@ def run_tui(stdscr):
             try:
                 rows = recomp.pull_snapshot(recomp_pkg)
                 if rows is not None:
-                    raw_n, raw_f = index_recomp_rows(rows, app_prefix)
-                    if not have_baseline:
-                        base_name, base_file = raw_n, raw_f
-                        have_baseline = True
-                        by_name, by_file = {}, {}
-                    else:
-                        by_name = minus_baseline(raw_n, base_name)
-                        by_file = minus_baseline(raw_f, base_file)
+                    by_name, by_file = index_recomp_rows(rows, app_prefix)
             except Exception:
                 pass
             last_snap = now
@@ -1055,8 +1051,6 @@ def run_tui(stdscr):
             if recomp_ok and recomp and recomp_pkg:
                 recomp.write_cmd(recomp_pkg, "reset")
                 by_name, by_file = {}, {}
-                base_name, base_file = {}, {}
-                have_baseline = False
                 status_msg = "Recomposition counts reset."
             else:
                 status_msg = recomp_err or "tracer not attached"
