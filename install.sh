@@ -234,7 +234,7 @@ main() {
   echo "done. Restart Zed once so kotlin-lsp attaches."
   echo "Then Cmd+Shift+R → Gradle: Tasks / Android: Devices & emulators"
   echo "edit JAVA_HOME / ANDROID_HOME in ~/.config/zed/settings.json if needed"
-  echo "edit package id in .zed/tasks.json (default com.example.piximons)"
+  echo "app id is read from Gradle applicationId (override ANDROID_APP_ID)"
 }
 
 main

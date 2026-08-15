@@ -198,14 +198,14 @@ boot_sim() {
   local udid="$1" name="$2"
   STATUS="booting $name…"
   draw_devices
-  if xcrun simctl boot "$udid" >/tmp/piximon-simctl.log 2>&1; then
+  if xcrun simctl boot "$udid" >/tmp/zed-android-simctl.log 2>&1; then
     # Open Simulator.app only if already installed — never trigger a download.
     if [ -d /Applications/Xcode.app ] || [ -d /Applications/Xcode-beta.app ]; then
       open -a Simulator >/dev/null 2>&1 || true
     fi
     STATUS="booted $name"
   else
-    STATUS="boot failed — /tmp/piximon-simctl.log"
+    STATUS="boot failed — /tmp/zed-android-simctl.log"
   fi
   collect
   clamp_cur
@@ -215,10 +215,10 @@ shutdown_sim() {
   local udid="$1" name="$2"
   STATUS="shutting down $name…"
   draw_devices
-  if xcrun simctl shutdown "$udid" >/tmp/piximon-simctl.log 2>&1; then
+  if xcrun simctl shutdown "$udid" >/tmp/zed-android-simctl.log 2>&1; then
     STATUS="shutdown $name"
   else
-    STATUS="shutdown failed — /tmp/piximon-simctl.log"
+    STATUS="shutdown failed — /tmp/zed-android-simctl.log"
   fi
   collect
   clamp_cur

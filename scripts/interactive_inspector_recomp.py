@@ -25,20 +25,18 @@ EXCLUDED_TYPES = {
     "OptIn", "Preview", "Composable", "DerivedStateOf", "Remember", "SideEffect",
     "LaunchedEffect", "DisposableEffect", "IntOffset", "Offset", "Size", "Brush",
     "MutableInteractionSource", "ColorMatrix", "ColorFilter", "Paint", "Path",
-    "Random", "Sparkle", "Sparkles", "Matrix", "ContentScale", "LinearEasing",
+    "Random", "Matrix", "ContentScale", "LinearEasing",
     "RepeatMode", "InfiniteTransition", "Activity", "Context", "Intent", "Uri",
-    "Settings", "ComponentName", "Lifecycle", "LifecycleOwner", "ShopCategory",
+    "Settings", "ComponentName", "Lifecycle", "LifecycleOwner",
     "MaterialTheme", "LocalContext", "LocalLifecycleOwner", "WindowInsets",
     "GridCells", "ExperimentalLayoutApi", "Build", "Uri", "Intent",
-    "ActivityResultContracts", "HatchingUiState", "PermissionStep",
-    "PixelButtonVariant", "PixelSpacing", "ContentScale",
+    "ActivityResultContracts", "ContentScale",
     "StartActivityForResult", "LifecycleResumeEffect",
 }
 
 # Call-like PascalCase that is not a layout node
 EXCLUDED_CALLS = EXCLUDED_TYPES | {
-    "Intent", "Uri", "ComponentName", "Settings", "OverlayService",
-    "HatchingScreenActions", "DesignPreviewMocks", "PixiMonDesignPreviewTheme",
+    "Intent", "Uri", "ComponentName", "Settings",
 }
 
 COMPOSE_CALL = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*[\(\{]")
@@ -577,17 +575,8 @@ class UINode:
         return added
 
     def _infer_composable_name(self):
-        """PixelButton etc. when uiautomator only gave Clickable/TextView."""
         if self.composable_name and find_composable_definition(self.composable_name)[0]:
             return self.composable_name
-        blob = " ".join(
-            t for t in [self.text] + [c.text for c in self.children] if t
-        ).upper()
-        if find_composable_definition("PixelButton")[0] and (
-            self.clickable or "Button" in (self.class_name or "")
-        ):
-            if any(k in blob for k in ("BUY", "OWNED", "NEED BITS", "HATCH", "SUMMON")):
-                return "PixelButton"
         return self.composable_name
 
     def can_deepen(self):
@@ -781,7 +770,7 @@ def fetch_ui_dump():
     if res.returncode != 0:
         raise RuntimeError(f"uiautomator dump failed: {res.stderr.strip() or res.stdout.strip()}")
 
-    dump_path = "/tmp/piximon_window_dump.xml"
+    dump_path = "/tmp/zed-android-window_dump.xml"
     pull_cmd = ["adb"] + adb_target + ["pull", "/sdcard/window_dump.xml", dump_path]
     res = subprocess.run(pull_cmd, capture_output=True, text=True)
     if res.returncode != 0:

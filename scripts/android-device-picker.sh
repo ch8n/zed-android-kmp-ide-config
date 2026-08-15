@@ -361,7 +361,7 @@ delete_avd() {
     adb -s "$serial" emu kill >/dev/null 2>&1 || true
     sleep 1
   fi
-  if avdmanager delete avd -n "$name" >/tmp/piximon-avd-del.log 2>&1; then
+  if avdmanager delete avd -n "$name" >/tmp/zed-android-avd-del.log 2>&1; then
     STATUS="deleted $name"
   else
     rm -rf "$HOME/.android/avd/${name}.avd" "$HOME/.android/avd/${name}.ini"
@@ -489,7 +489,7 @@ avd_is_up() {
 
 start_avd() {
   local avd="$1" log epid serial i last
-  log="/tmp/piximon-emu-${avd}.log"
+  log="/tmp/zed-android-emu-${avd}.log"
   STATUS="starting $avd (lite)…"
   draw_devices
   # Detach from the picker's raw TTY / process group. Inheriting stdin or
@@ -510,7 +510,7 @@ start_avd() {
     </dev/null >>"$log" 2>&1 &
   epid=$!
   disown "$epid" 2>/dev/null || true
-  echo "$epid" >"/tmp/piximon-emu-${avd}.pid"
+  echo "$epid" >"/tmp/zed-android-emu-${avd}.pid"
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     sleep 2
     collect

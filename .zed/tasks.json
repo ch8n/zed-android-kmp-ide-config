@@ -27,7 +27,7 @@
     "hide": "on_success"
   },
   {
-    "label": "Logcat: pidcat (PixiMon)",
+    "label": "Logcat: pidcat (app)",
     "command": "bash",
     "args": ["scripts/pidcat-app.sh", "-c"],
     "use_new_terminal": true,
@@ -103,7 +103,7 @@
     "command": "bash",
     "args": [
       "-lc",
-      "nohup emulator -avd small_phone -memory 1024 -cores 2 -lowram -feature -Vulkan -no-audio -no-boot-anim -gpu host -accel on -no-snapshot-load -no-snapshot-save -no-metrics </dev/null >/tmp/piximon-emu-small_phone.log 2>&1 & echo \"started small_phone pid $!  log /tmp/piximon-emu-small_phone.log\""
+      "nohup emulator -avd small_phone -memory 1024 -cores 2 -lowram -feature -Vulkan -no-audio -no-boot-anim -gpu host -accel on -no-snapshot-load -no-snapshot-save -no-metrics </dev/null >/tmp/zed-android-emu-small_phone.log 2>&1 & echo \"started small_phone pid $!  log /tmp/zed-android-emu-small_phone.log\""
     ],
     "use_new_terminal": true,
     "allow_concurrent_runs": false,

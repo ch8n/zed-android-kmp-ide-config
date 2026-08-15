@@ -158,12 +158,12 @@ save_cache() {
 }
 
 load_tasks() {
-  local raw="/tmp/piximon-gradle-tasks.out"
+  local raw="/tmp/zed-android-gradle-tasks.out"
   STATUS="loading ./gradlew tasks --all…"
   draw
   if ! "$ROOT/gradlew" -p "$ROOT" tasks --all --console=plain \
-      >"$raw" 2>/tmp/piximon-gradle-tasks.err; then
-    STATUS="gradlew tasks failed — /tmp/piximon-gradle-tasks.err"
+      >"$raw" 2>/tmp/zed-android-gradle-tasks.err; then
+    STATUS="gradlew tasks failed — /tmp/zed-android-gradle-tasks.err"
     TASK=(); DESC=()
     apply_filter
     return 1
@@ -240,7 +240,7 @@ main() {
   ROOT="$(find_root "${1:-$PWD}")" || {
     die "No gradlew found walking up from ${1:-$PWD}"
   }
-  CACHE="$ROOT/.gradle/piximon-gradle-tasks.cache"
+  CACHE="$ROOT/.gradle/android-ide-gradle-tasks.cache"
 
   STTY_ORIG="$(stty -g)"
   stty -echo -icanon
