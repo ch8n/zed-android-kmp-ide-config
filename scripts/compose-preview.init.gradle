@@ -1,76 +1,82 @@
-// Standalone Compose Preview + Blueprint. Does not belong in the app Gradle files.
+// Standalone Compose Preview + Blueprint. Not part of the app Gradle files.
+//
+// Same trick as yschimke/skills compose-preview init script:
+// put the Gradle *plugin marker* on each project's buildscript classpath,
+// then apply by id in afterEvaluate (so AGP is already on the project).
 //
 //   ./gradlew --init-script scripts/compose-preview.init.gradle \
 //     --no-configuration-cache :app:composePreviewRender
 //
-// Applies ee.schimke.composeai.preview from this script's classpath when the
-// project does not already apply it. Pins version here (not in the app catalog).
+// Override:
+//   -PcomposePreview.sdkVersion=35
+//   -PcomposePreview.variant=debug
+//   -PcomposePreview.androidxCore=1.18.0
 //
-// Robolectric preview JVM is JDK 17 — keep sdkVersion at 35 unless JAVA_HOME is 21+.
-// Override: -PcomposePreview.sdkVersion=35  -PcomposePreview.variant=debug
+// Preview/Blueprint transitives (core 1.19+) require compileSdk 37 + AGP 9.1.
+// We force androidx.core back to the host app line so this task does not
+// upgrade the project.
 
-initscript {
-    repositories {
-        mavenCentral()
-        google()
-        gradlePluginPortal()
-    }
-    dependencies {
-        classpath("ee.schimke.composeai:compose-preview-plugin:0.12.1")
-    }
-}
-
+def previewPluginId = "ee.schimke.composeai.preview"
+def previewMarker = "ee.schimke.composeai.preview:ee.schimke.composeai.preview.gradle.plugin:0.12.1"
 def blueprintCoord = "uk.co.gusward:blueprint-compose-preview:1.0.1"
 
 gradle.beforeProject { project ->
-    project.pluginManager.withPlugin("com.android.application") {
-        applyPreviewPlugin(project)
-        injectBlueprint(project, blueprintCoord)
-    }
-    project.pluginManager.withPlugin("com.android.library") {
-        applyPreviewPlugin(project)
-        injectBlueprint(project, blueprintCoord)
-    }
-}
-
-void applyPreviewPlugin(project) {
-    if (!project.plugins.hasPlugin("ee.schimke.composeai.preview")) {
-        project.pluginManager.apply("ee.schimke.composeai.preview")
-        System.err.println("[compose-preview-init] applied ee.schimke.composeai.preview on ${project.path}")
-    } else {
-        System.err.println("[compose-preview-init] project already applies preview plugin on ${project.path}")
-    }
-    project.afterEvaluate {
-        def ext = project.extensions.findByName("composePreview")
-        if (ext == null) {
-            System.err.println("[compose-preview-init] no composePreview extension on ${project.path}")
-            return
+    project.buildscript { bs ->
+        bs.repositories { repos ->
+            repos.mavenCentral()
+            repos.google()
+            repos.gradlePluginPortal()
         }
-        def variant = project.findProperty("composePreview.variant") ?: "debug"
-        def sdk = (project.findProperty("composePreview.sdkVersion") ?: "35") as String
-        try {
-            ext.variant.set(variant.toString())
-        } catch (ignored) {
+        bs.dependencies.add("classpath", previewMarker)
+    }
+    project.configurations.configureEach { cfg ->
+        cfg.resolutionStrategy.eachDependency { details ->
+            if (details.requested.group != "androidx.core") {
+                return
+            }
+            def name = details.requested.name
+            if (name != "core" && name != "core-ktx") {
+                return
+            }
+            def pin = project.findProperty("composePreview.androidxCore") ?: "1.18.0"
+            details.useVersion(pin.toString())
+            details.because("compose-preview init: keep androidx.core compatible with compileSdk 36 / AGP 9.0")
         }
-        try {
-            ext.sdkVersion.set(sdk.toInteger())
-        } catch (ignored) {
-        }
-        System.err.println("[compose-preview-init] ${project.path} variant=${variant} sdkVersion=${sdk}")
     }
 }
 
-void injectBlueprint(project, coord) {
-    project.dependencies.add("debugImplementation", coord)
-    def gen = new File(project.rootDir, ".zed/generated/blueprint/${project.name}")
-    gen.mkdirs()
-    project.afterEvaluate {
-        def android = project.extensions.findByName("android")
-        if (android == null) {
-            return
+gradle.projectsLoaded {
+    gradle.rootProject.allprojects { project ->
+        project.afterEvaluate {
+            def androidApp = project.plugins.hasPlugin("com.android.application")
+            def androidLib = project.plugins.hasPlugin("com.android.library")
+            if (!androidApp && !androidLib) {
+                return
+            }
+            if (!project.plugins.hasPlugin(previewPluginId)) {
+                project.pluginManager.apply(previewPluginId)
+                System.err.println("[compose-preview-init] applied ${previewPluginId} on ${project.path}")
+            }
+            def ext = project.extensions.findByName("composePreview")
+            if (ext != null) {
+                def variant = project.findProperty("composePreview.variant") ?: "debug"
+                def sdk = (project.findProperty("composePreview.sdkVersion") ?: "35") as String
+                try { ext.variant.set(variant.toString()) } catch (ignored) {}
+                try { ext.sdkVersion.set(sdk.toInteger()) } catch (ignored) {}
+                System.err.println("[compose-preview-init] ${project.path} variant=${variant} sdkVersion=${sdk}")
+            }
+            try {
+                project.dependencies.add("debugImplementation", blueprintCoord)
+            } catch (Exception e) {
+                System.err.println("[compose-preview-init] could not add Blueprint: ${e.message}")
+            }
+            def android = project.extensions.findByName("android")
+            if (android != null) {
+                def gen = new File(project.rootDir, ".zed/generated/blueprint/${project.name}")
+                gen.mkdirs()
+                android.sourceSets.getByName("debug").kotlin.srcDir(gen)
+                System.err.println("[compose-preview-init] ${project.path} extra src ${gen}")
+            }
         }
-        android.sourceSets.getByName("debug").kotlin.srcDir(gen)
-        System.err.println("[compose-preview-init] ${project.path} debug + ${coord}")
-        System.err.println("[compose-preview-init] ${project.path} extra src ${gen}")
     }
 }
