@@ -1,0 +1,76 @@
+// Standalone Compose Preview + Blueprint. Does not belong in the app Gradle files.
+//
+//   ./gradlew --init-script scripts/compose-preview.init.gradle \
+//     --no-configuration-cache :app:composePreviewRender
+//
+// Applies ee.schimke.composeai.preview from this script's classpath when the
+// project does not already apply it. Pins version here (not in the app catalog).
+//
+// Robolectric preview JVM is JDK 17 — keep sdkVersion at 35 unless JAVA_HOME is 21+.
+// Override: -PcomposePreview.sdkVersion=35  -PcomposePreview.variant=debug
+
+initscript {
+    repositories {
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath("ee.schimke.composeai:compose-preview-plugin:0.12.1")
+    }
+}
+
+def blueprintCoord = "uk.co.gusward:blueprint-compose-preview:1.0.1"
+
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin("com.android.application") {
+        applyPreviewPlugin(project)
+        injectBlueprint(project, blueprintCoord)
+    }
+    project.pluginManager.withPlugin("com.android.library") {
+        applyPreviewPlugin(project)
+        injectBlueprint(project, blueprintCoord)
+    }
+}
+
+void applyPreviewPlugin(project) {
+    if (!project.plugins.hasPlugin("ee.schimke.composeai.preview")) {
+        project.pluginManager.apply("ee.schimke.composeai.preview")
+        System.err.println("[compose-preview-init] applied ee.schimke.composeai.preview on ${project.path}")
+    } else {
+        System.err.println("[compose-preview-init] project already applies preview plugin on ${project.path}")
+    }
+    project.afterEvaluate {
+        def ext = project.extensions.findByName("composePreview")
+        if (ext == null) {
+            System.err.println("[compose-preview-init] no composePreview extension on ${project.path}")
+            return
+        }
+        def variant = project.findProperty("composePreview.variant") ?: "debug"
+        def sdk = (project.findProperty("composePreview.sdkVersion") ?: "35") as String
+        try {
+            ext.variant.set(variant.toString())
+        } catch (ignored) {
+        }
+        try {
+            ext.sdkVersion.set(sdk.toInteger())
+        } catch (ignored) {
+        }
+        System.err.println("[compose-preview-init] ${project.path} variant=${variant} sdkVersion=${sdk}")
+    }
+}
+
+void injectBlueprint(project, coord) {
+    project.dependencies.add("debugImplementation", coord)
+    def gen = new File(project.rootDir, ".zed/generated/blueprint/${project.name}")
+    gen.mkdirs()
+    project.afterEvaluate {
+        def android = project.extensions.findByName("android")
+        if (android == null) {
+            return
+        }
+        android.sourceSets.getByName("debug").kotlin.srcDir(gen)
+        System.err.println("[compose-preview-init] ${project.path} debug + ${coord}")
+        System.err.println("[compose-preview-init] ${project.path} extra src ${gen}")
+    }
+}

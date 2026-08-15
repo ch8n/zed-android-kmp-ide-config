@@ -9,6 +9,33 @@
     "hide": "on_success"
   },
   {
+    "label": "Compose: Preview (this file)",
+    "command": "bash",
+    "args": ["scripts/compose-preview-zed.sh"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal_target": "center",
+    "hide": "never"
+  },
+  {
+    "label": "Compose: Preview + Blueprint (this file)",
+    "command": "bash",
+    "args": ["scripts/compose-preview-zed.sh", "--blueprint"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal_target": "center",
+    "hide": "never"
+  },
+  {
+    "label": "Compose: Preview all + Blueprint",
+    "command": "bash",
+    "args": ["scripts/compose-preview-zed.sh", "--all", "--blueprint"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal_target": "center",
+    "hide": "never"
+  },
+  {
     "label": "Compose: Stability report",
     "command": "bash",
     "args": ["scripts/compose-stability-report.sh"],

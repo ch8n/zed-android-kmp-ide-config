@@ -83,6 +83,9 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
 | `scripts/interactive_inspector_recomp.py` | Layout inspector + live recomposition counts (`c` toggles counts; debug APK, no app source) |
+| `scripts/compose-preview-zed.sh` | Host `@Preview` → PNG; `--init-script` so the app Gradle files are not edited |
+| `scripts/compose-preview.init.gradle` | **Applies** `ee.schimke.composeai.preview` (not in the app), Blueprint dep, generated debug sources |
+| `scripts/compose-blueprint-previews.py` | Writes Blueprint companions under `.zed/generated/` (not `app/src`) |
 | `scripts/compose-stability-report.sh` | Compose compiler stability TUI (skippable / unstable params; no build.gradle edit) |
 | `scripts/compose-stability-lsp.py` | Tiny LSP: hover + diagnostics + inlays from those reports |
 | `zed-extension/compose-stability/` | Zed extension that starts the LSP for Kotlin |
@@ -98,6 +101,9 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 ## Tasks
 
 - **Android: Layout Inspector** — tree + per-composable counts (`c` on/off)
+- **Compose: Preview (this file)** — Robolectric PNGs for `@Preview` in the active tab → `.zed/compose-preview.md`
+- **Compose: Preview + Blueprint (this file)** — same, plus generated Blueprint measurement overlays
+- **Compose: Preview all + Blueprint** — every preview in the module (slow first run)
 - **Compose: Stability report** — compiler skippable/unstable report (`i` issues/all)
 
 ### Compose stability in the editor (LSP)
