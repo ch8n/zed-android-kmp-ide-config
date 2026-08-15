@@ -135,7 +135,7 @@ install_project() {
   fi
 
   local s
-  for s in android-device-picker.sh android-install-launch.sh android-app-id.sh pidcat-app.sh pidcat-app.py gradle-task-picker.sh ios-simulator-picker.sh; do
+  for s in android-device-picker.sh android-install-launch.sh android-app-id.sh pidcat-app.sh pidcat-app.py interactive_inspector.py gradle-task-picker.sh ios-simulator-picker.sh; do
     if [ -e "$TARGET/scripts/$s" ]; then
       if confirm "overwrite $TARGET/scripts/$s ?"; then
         backup "$TARGET/scripts/$s"

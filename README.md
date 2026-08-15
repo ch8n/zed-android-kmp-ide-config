@@ -80,6 +80,7 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 | `scripts/pidcat-app.sh` | Colored logcat: tag (empty=all) then multi-select levels |
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
+| `scripts/interactive_inspector.py` | Terminal layout inspector (Compose tree → Zed) |
 
 ### User settings copied from this machine
 
@@ -91,6 +92,7 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 ## Tasks
 
+- **Android: Layout Inspector (Interactive)**
 - **Android: Install & Launch Debug App** — `:app:installDebug` + launch
 - **Logcat: pidcat** (app / emulator / device / errors) — colored
 - **Android: Devices & emulators**

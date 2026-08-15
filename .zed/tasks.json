@@ -1,5 +1,14 @@
 [
   {
+    "label": "Android: Layout Inspector (Interactive)",
+    "command": "python3",
+    "args": ["scripts/interactive_inspector.py"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
     "label": "Android: Install & Launch Debug App",
     "command": "bash",
     "args": ["scripts/android-install-launch.sh"],
