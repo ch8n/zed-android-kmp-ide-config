@@ -4,7 +4,7 @@ Zed as a light IDE for **Android + Kotlin + KMP/KMM**: JetBrains `kotlin-lsp`, o
 
 > GitHub repo slug is `zed-android-kmp-ide-config` (`+` is not allowed in GitHub names).
 
-Interactive pickers open as **center editor tabs**. Failures stay visible (`hide: on_success` + Enter to close).
+Every registered task opens as a **center editor tab** (`use_new_terminal` + `reveal_target: center`) and **closes when it succeeds** (`hide: on_success`). Failures stay visible until you press Enter.
 
 ## Install
 
