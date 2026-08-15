@@ -135,7 +135,15 @@ install_project() {
   fi
 
   local s
-  for s in android-device-picker.sh android-install-launch.sh android-app-id.sh pidcat-app.sh pidcat-app.py interactive_inspector.py gradle-task-picker.sh ios-simulator-picker.sh; do
+  for s in \
+    android-device-picker.sh android-install-launch.sh android-app-id.sh \
+    pidcat-app.sh pidcat-app.py \
+    interactive_inspector.py interactive_inspector_recomp.py \
+    compose-recomposition.py compose-recomposition.sh \
+    jdwp_min.py recomp-agent.dex \
+    gradle-task-picker.sh ios-simulator-picker.sh
+  do
+    [ -f "$SRC/scripts/$s" ] || continue
     if [ -e "$TARGET/scripts/$s" ]; then
       if confirm "overwrite $TARGET/scripts/$s ?"; then
         backup "$TARGET/scripts/$s"
@@ -149,7 +157,12 @@ install_project() {
       echo "  wrote   $TARGET/scripts/$s"
     fi
   done
-  chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/pidcat-app.py" 2>/dev/null || chmod +x "$TARGET/scripts/"*.sh
+  if [ -d "$SRC/scripts/recomp-agent" ]; then
+    mkdir -p "$TARGET/scripts/recomp-agent"
+    cp -R "$SRC/scripts/recomp-agent/." "$TARGET/scripts/recomp-agent/"
+    echo "  wrote   $TARGET/scripts/recomp-agent/"
+  fi
+  chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/"*.py 2>/dev/null || true
 }
 
 maybe_pidcat() {

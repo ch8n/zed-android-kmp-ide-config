@@ -81,6 +81,7 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
 | `scripts/interactive_inspector.py` | Terminal layout inspector (Compose tree → Zed) |
+| `scripts/interactive_inspector_recomp.py` | Same tree + live recomposition counts (debug APK, no app source) |
 
 ### User settings copied from this machine
 
@@ -92,6 +93,7 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 ## Tasks
 
+- **Android: Compose recomposition (live)** — inspector + per-composable counts
 - **Android: Layout Inspector (Interactive)**
 - **Android: Install & Launch Debug App** — `:app:installDebug` + launch
 - **Logcat: pidcat** (app / emulator / device / errors) — colored
