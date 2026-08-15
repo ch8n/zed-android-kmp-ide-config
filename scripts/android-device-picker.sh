@@ -411,8 +411,8 @@ abi.type=${abi}
 avd.ini.displayname=${name}
 avd.ini.encoding=UTF-8
 disk.dataPartition.size=${disk}
-fastboot.forceColdBoot=no
-fastboot.forceFastBoot=yes
+fastboot.forceColdBoot=yes
+fastboot.forceFastBoot=no
 hw.audioInput=no
 hw.audioOutput=no
 hw.battery=yes
@@ -491,6 +491,7 @@ start_avd() {
   # staying in Zed's task group makes the emulator exit immediately.
   : >"$log"
   nohup emulator -avd "$avd" -no-audio -no-boot-anim -gpu host -accel on \
+    -no-snapshot-load -no-snapshot-save -no-metrics \
     </dev/null >>"$log" 2>&1 &
   epid=$!
   disown "$epid" 2>/dev/null || true
