@@ -1,20 +1,8 @@
 [
   {
-    "label": "Android: Assemble Debug",
-    "command": "./gradlew",
-    "args": ["assembleDebug"],
-    "use_new_terminal": true,
-    "allow_concurrent_runs": false,
-    "reveal_target": "center",
-    "hide": "on_success"
-  },
-  {
     "label": "Android: Install & Launch Debug App",
     "command": "bash",
-    "args": [
-      "-lc",
-      "./gradlew installDebug && adb shell am start -n com.example.piximons/.MainActivity"
-    ],
+    "args": ["scripts/android-install-launch.sh"],
     "use_new_terminal": true,
     "allow_concurrent_runs": false,
     "reveal_target": "center",
@@ -23,10 +11,7 @@
   {
     "label": "Logcat: pidcat (PixiMon)",
     "command": "bash",
-    "args": [
-      "-lc",
-      "pidcat -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
-    ],
+    "args": ["scripts/pidcat-app.sh", "-c"],
     "use_new_terminal": true,
     "allow_concurrent_runs": true,
     "reveal_target": "center",
@@ -35,10 +20,7 @@
   {
     "label": "Logcat: pidcat emulator only",
     "command": "bash",
-    "args": [
-      "-lc",
-      "pidcat -e -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
-    ],
+    "args": ["scripts/pidcat-app.sh", "-e", "-c"],
     "use_new_terminal": true,
     "allow_concurrent_runs": true,
     "reveal_target": "center",
@@ -47,10 +29,7 @@
   {
     "label": "Logcat: pidcat device only",
     "command": "bash",
-    "args": [
-      "-lc",
-      "pidcat -d -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
-    ],
+    "args": ["scripts/pidcat-app.sh", "-d", "-c"],
     "use_new_terminal": true,
     "allow_concurrent_runs": true,
     "reveal_target": "center",
@@ -59,10 +38,7 @@
   {
     "label": "Logcat: pidcat errors (E+)",
     "command": "bash",
-    "args": [
-      "-lc",
-      "pidcat -c -l E com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
-    ],
+    "args": ["scripts/pidcat-app.sh", "-c", "-l", "E"],
     "use_new_terminal": true,
     "allow_concurrent_runs": true,
     "reveal_target": "center",

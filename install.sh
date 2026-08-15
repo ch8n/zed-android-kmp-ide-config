@@ -135,7 +135,7 @@ install_project() {
   fi
 
   local s
-  for s in android-device-picker.sh gradle-task-picker.sh ios-simulator-picker.sh; do
+  for s in android-device-picker.sh android-install-launch.sh pidcat-app.sh pidcat-app.py gradle-task-picker.sh ios-simulator-picker.sh; do
     if [ -e "$TARGET/scripts/$s" ]; then
       if confirm "overwrite $TARGET/scripts/$s ?"; then
         backup "$TARGET/scripts/$s"
@@ -149,7 +149,7 @@ install_project() {
       echo "  wrote   $TARGET/scripts/$s"
     fi
   done
-  chmod +x "$TARGET/scripts/"*.sh
+  chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/pidcat-app.py" 2>/dev/null || chmod +x "$TARGET/scripts/"*.sh
 }
 
 maybe_pidcat() {

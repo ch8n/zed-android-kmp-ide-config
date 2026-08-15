@@ -73,8 +73,10 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 |---|---|
 | `user/settings.json` | Full user Zed settings (kotlin-lsp, docks, fonts, theme, extensions, JDK/SDK env) |
 | `.zed/settings.json` | Project overlay: kotlin-lsp + terminal env |
-| `.zed/tasks.json` | Assemble, install, pidcat, pickers, tests, clean |
+| `.zed/tasks.json` | Install+launch, pidcat, pickers, tests, clean |
 | `scripts/android-device-picker.sh` | ↑↓ AVD/USB: start/stop, logcat, new/delete AVD |
+| `scripts/android-install-launch.sh` | `:app:installDebug` then launch (fails if `am start` errors) |
+| `scripts/pidcat-app.sh` | Colored pidcat (fixes Python 3 `print(bytes)` + `TERM=dumb`) |
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
 
@@ -88,12 +90,13 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 ## Tasks
 
-- **Android: Devices & emulators** — center tab
-- **Gradle: Tasks (filter & run)** — center tab
-- **iOS: Simulators** — center tab (will not install Xcode)
-- **Emulator: Start small_phone (lite)** — center tab
-- pidcat variants stay in the terminal dock
-- assemble / install / tests / clean reuse the existing terminal
+- **Android: Install & Launch Debug App** — `:app:installDebug` + launch
+- **Logcat: pidcat** (app / emulator / device / errors) — colored
+- **Android: Devices & emulators**
+- **Gradle: Tasks (filter & run)**
+- **iOS: Simulators** (will not install Xcode)
+- **Emulator: Start small_phone (lite)**
+- **Android: Unit Tests** / **Gradle: Clean** / **Gradle: Stop daemons**
 
 ## Env you should edit
 
@@ -105,10 +108,9 @@ Defaults match Homebrew on Apple Silicon:
 App id used by install + pidcat: `com.example.piximons`
 
 ```bash
-ANDROID_APP_ID=com.your.app scripts/android-device-picker.sh
+ANDROID_APP_ID=com.your.app scripts/android-install-launch.sh
+PIDCAT_PACKAGE=com.your.app scripts/pidcat-app.sh
 ```
-
-And edit the pidcat / `am start` lines in `.zed/tasks.json`.
 
 ## Picker keys
 
@@ -118,7 +120,7 @@ And edit the pidcat / `am start` lines in `.zed/tasks.json`.
 
 ## Optional tools
 
-- [pidcat](https://github.com/JakeWharton/pidcat) for colored logcat
+- Colored logcat via `scripts/pidcat-app.py` (`adb logcat -v color`). Homebrew pidcat 2.1.0 is optional and broken on Python 3.
 - `emulator` + `adb` on `PATH` (from `ANDROID_HOME`)
 - Xcode only if you already have it
 
