@@ -1,6 +1,6 @@
 [
   {
-    "label": "Android: Compose recomposition (live)",
+    "label": "Android: Layout Inspector",
     "command": "python3",
     "args": ["scripts/interactive_inspector_recomp.py"],
     "use_new_terminal": true,
@@ -9,9 +9,9 @@
     "hide": "on_success"
   },
   {
-    "label": "Android: Layout Inspector (Interactive)",
-    "command": "python3",
-    "args": ["scripts/interactive_inspector.py"],
+    "label": "Compose: Stability report",
+    "command": "bash",
+    "args": ["scripts/compose-stability-report.sh"],
     "use_new_terminal": true,
     "allow_concurrent_runs": false,
     "reveal_target": "center",

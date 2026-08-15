@@ -1,0 +1,18 @@
+// Reusable: enable Compose compiler reports without editing the project.
+// Use with: ./gradlew --init-script this-file --no-configuration-cache --rerun-tasks …
+
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin("org.jetbrains.kotlin.plugin.compose") {
+        project.afterEvaluate {
+            def ext = project.extensions.findByName("composeCompiler")
+            if (ext == null) {
+                System.err.println("[compose-reports] no composeCompiler extension on ${project.path}")
+                return
+            }
+            ext.reportsDestination.set(project.layout.buildDirectory.dir("compose_compiler"))
+            def dest = project.layout.buildDirectory.dir("compose_compiler").get().asFile
+            dest.mkdirs()
+            System.err.println("[compose-reports] ${project.path} reports -> ${dest}")
+        }
+    }
+}

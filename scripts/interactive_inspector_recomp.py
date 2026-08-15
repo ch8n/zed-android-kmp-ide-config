@@ -5,7 +5,7 @@ Layout Inspector + live recomposition counts (copy of interactive_inspector.py).
 Same tree / lazy expand as the original. Sidecar JDWP tracer (no app source).
 Counts show only on currently visible (expanded) rows.
 
-[e] one level  [E] max depth  [c] collapse  [r] refresh dump
+[e] one level  [E] max depth  [c] counts on/off  [r] refresh dump
 [R] reset counts  [Enter] Zed  [q] quit (stops tracer)
 """
 
@@ -840,6 +840,7 @@ def run_tui(stdscr):
     last_snap = 0.0
     last_paint_sig = None
     app_prefix = (recomp_pkg or "").strip()
+    show_counts = bool(recomp_ok)
 
     def refresh_screen():
         nonlocal raw_root, active_root, status_msg
@@ -863,9 +864,11 @@ def run_tui(stdscr):
             
             update_active_view()
             set_expand_depth(active_root, 0, 1)
-            extra = "  counts on" if recomp_ok else f"  {recomp_err}" if recomp_err else ""
+            extra = "  counts on" if (recomp_ok and show_counts) else (
+                f"  {recomp_err}" if recomp_err else "  counts off"
+            )
             status_msg = (
-                "Ready. [e]+1  [E]max  [c]collapse  [R]reset counts  [Enter]Zed"
+                "Ready. [e]+1  [E]max  [c]counts  [R]reset  [Enter]Zed"
                 + extra
             )
         except Exception as e:
@@ -892,7 +895,7 @@ def run_tui(stdscr):
         status_y = max(0, h - 1)
         
         now = time.time()
-        if recomp_ok and recomp and recomp_pkg and (now - last_snap) >= 0.4:
+        if show_counts and recomp_ok and recomp and recomp_pkg and (now - last_snap) >= 0.4:
             try:
                 rows = recomp.pull_snapshot(recomp_pkg)
                 if rows is not None:
@@ -914,8 +917,10 @@ def run_tui(stdscr):
         elif cursor_idx >= scroll_offset + view_height:
             scroll_offset = cursor_idx - view_height + 1
 
-        count_sig = tuple(
-            recomp_count_for(n, by_name, by_file) for n in visible_items
+        count_sig = (
+            tuple(recomp_count_for(n, by_name, by_file) for n in visible_items)
+            if show_counts
+            else ()
         )
         paint_sig = (
             h,
@@ -924,6 +929,7 @@ def run_tui(stdscr):
             scroll_offset,
             status_msg,
             focus_compose_only,
+            show_counts,
             count_sig,
             tuple((id(n), n.expanded) for n in visible_items),
         )
@@ -938,10 +944,10 @@ def run_tui(stdscr):
             last_paint_sig = paint_sig
             stdscr.erase()
             mode_tag = "[Compose Root]" if focus_compose_only else "[All Window]"
-            cnt_tag = "[recomp ON]" if recomp_ok else "[recomp off]"
+            cnt_tag = "[recomp ON]" if (recomp_ok and show_counts) else "[recomp off]"
             header = (
-                f" [Inspector+recomp] {mode_tag} {cnt_tag}  "
-                f"[e]+1 [E]max [c]collapse [r]dump [R]reset [q] "
+                f" [Layout Inspector] {mode_tag} {cnt_tag}  "
+                f"[e]+1 [E]max [c]counts [r]dump [R]reset [q] "
             )
             stdscr.addstr(0, 0, header[:w-1].ljust(w-1), curses.A_REVERSE | curses.A_BOLD)
 
@@ -956,7 +962,9 @@ def run_tui(stdscr):
                 has_expandable_children = node.can_deepen() or (node.expanded and node.children)
                 prefix = ("▼ " if node.expanded else "▶ ") if has_expandable_children else "• "
                 
-                count = recomp_count_for(node, by_name, by_file)
+                count = (
+                    recomp_count_for(node, by_name, by_file) if show_counts else None
+                )
                 count_bit = f"  ×{count}" if count is not None else ""
                 line_str = f"{depth_tag}{indent}{prefix}{node.display_text()}{count_bit}"
                 is_selected = (item_idx == cursor_idx)
@@ -1028,11 +1036,19 @@ def run_tui(stdscr):
                 n = expand_to_max_depth(node)
                 label = node.get_layout_tag().strip("<>")
                 status_msg = f"Expanded <{label}> to max depth ({n} nodes opened)"
-        elif key in (ord('c'), ord('C')):  # 'c' collapses all
-            set_expand_depth(active_root, 0, 1)
-            cursor_idx = 0
-            scroll_offset = 0
-            status_msg = "Collapsed all nodes back to root."
+        elif key in (ord('c'), ord('C')):
+            if not recomp_ok or not recomp or not recomp_pkg:
+                status_msg = recomp_err or "tracer not attached"
+            else:
+                show_counts = not show_counts
+                recomp.write_cmd(recomp_pkg, "on" if show_counts else "off")
+                if not show_counts:
+                    by_name, by_file = {}, {}
+                status_msg = (
+                    "Recomposition counts on."
+                    if show_counts
+                    else "Recomposition counts off."
+                )
         elif key == ord('f'):
             focus_compose_only = not focus_compose_only
             update_active_view()

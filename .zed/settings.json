@@ -16,7 +16,13 @@
   },
   "languages": {
     "Kotlin": {
-      "language_servers": ["kotlin-lsp", "!kotlin-language-server"]
+      "language_servers": ["kotlin-lsp", "compose-stability", "!kotlin-language-server"],
+      "inlay_hints": {
+        "enabled": true,
+        "show_type_hints": true,
+        "show_parameter_hints": true,
+        "show_other_hints": true
+      }
     }
   },
   "lsp": {

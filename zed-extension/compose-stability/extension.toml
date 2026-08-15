@@ -1,0 +1,10 @@
+id = "compose-stability"
+name = "Compose Stability"
+version = "0.1.0"
+schema_version = 1
+authors = ["zed-android-kmp-ide-config"]
+description = "Hover, diagnostics, and inlay hints from Compose compiler stability reports."
+
+[language_servers.compose-stability]
+name = "Compose Stability"
+languages = ["Kotlin"]

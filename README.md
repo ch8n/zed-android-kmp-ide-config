@@ -80,8 +80,10 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 | `scripts/pidcat-app.sh` | Colored logcat: tag (empty=all) then multi-select levels |
 | `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
 | `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
-| `scripts/interactive_inspector.py` | Terminal layout inspector (Compose tree → Zed) |
-| `scripts/interactive_inspector_recomp.py` | Same tree + live recomposition counts (debug APK, no app source) |
+| `scripts/interactive_inspector_recomp.py` | Layout inspector + live recomposition counts (`c` toggles counts; debug APK, no app source) |
+| `scripts/compose-stability-report.sh` | Compose compiler stability TUI (skippable / unstable params; no build.gradle edit) |
+| `scripts/compose-stability-lsp.py` | Tiny LSP: hover + diagnostics + inlays from those reports |
+| `zed-extension/compose-stability/` | Zed extension that starts the LSP for Kotlin |
 
 ### User settings copied from this machine
 
@@ -93,8 +95,18 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 ## Tasks
 
-- **Android: Compose recomposition (live)** — inspector + per-composable counts
-- **Android: Layout Inspector (Interactive)**
+- **Android: Layout Inspector** — tree + per-composable counts (`c` on/off)
+- **Compose: Stability report** — compiler skippable/unstable report (`i` issues/all)
+
+### Compose stability in the editor (LSP)
+
+Zed cannot load a custom LSP from `settings.json` alone. After install:
+
+1. Run **Compose: Stability report** once (writes `build/**/compose_compiler/*-composables.txt`).
+2. Command palette → **zed: install dev extension** → `zed-extension/compose-stability`.
+3. `.zed/settings.json` already lists `compose-stability` next to `kotlin-lsp`.
+
+Then on `@Composable` functions: hover = skippable + param stability, yellow diagnostic if not skippable / unstable params, inlay `skippable` / `not skippable` and `stable` / `unstable` on params. Reload the window if the server does not attach.
 - **Android: Install & Launch Debug App** — `:app:installDebug` + launch
 - **Logcat: pidcat** (app / emulator / device / errors) — colored
 - **Android: Devices & emulators**

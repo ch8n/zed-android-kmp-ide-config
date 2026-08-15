@@ -138,8 +138,10 @@ install_project() {
   for s in \
     android-device-picker.sh android-install-launch.sh android-app-id.sh \
     pidcat-app.sh pidcat-app.py \
-    interactive_inspector.py interactive_inspector_recomp.py \
+    interactive_inspector_recomp.py \
     compose-recomposition.py compose-recomposition.sh \
+    compose-stability-report.sh compose-stability-report.py compose-reports.init.gradle \
+    compose-stability-lsp.py \
     jdwp_min.py recomp-agent.dex \
     gradle-task-picker.sh ios-simulator-picker.sh
   do
@@ -163,6 +165,16 @@ install_project() {
     echo "  wrote   $TARGET/scripts/recomp-agent/"
   fi
   chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/"*.py 2>/dev/null || true
+  if [ -d "$SRC/zed-extension/compose-stability" ]; then
+    mkdir -p "$TARGET/zed-extension/compose-stability/src"
+    cp "$SRC/zed-extension/compose-stability/extension.toml" "$TARGET/zed-extension/compose-stability/"
+    cp "$SRC/zed-extension/compose-stability/Cargo.toml" "$TARGET/zed-extension/compose-stability/"
+    [ -f "$SRC/zed-extension/compose-stability/Cargo.lock" ] && \
+      cp "$SRC/zed-extension/compose-stability/Cargo.lock" "$TARGET/zed-extension/compose-stability/"
+    cp "$SRC/zed-extension/compose-stability/src/lib.rs" "$TARGET/zed-extension/compose-stability/src/"
+    echo "  wrote   $TARGET/zed-extension/compose-stability/"
+    echo "  Zed: cmd-shift-p → 'zed: install dev extension' → that folder (once)."
+  fi
 }
 
 maybe_pidcat() {
