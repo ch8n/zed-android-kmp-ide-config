@@ -69,6 +69,11 @@ PY
 OUT_DIR="${ROOT}/.zed/compose-preview"
 LAST_KT="${OUT_DIR}/last-kt"
 mkdir -p "$OUT_DIR" "$GEN_ROOT"
+# Markers + .gitignore + zed-exit cleaner (no per-project setup).
+if [ -f "$HERE/compose-preview-clean.sh" ]; then
+  chmod +x "$HERE/compose-preview-clean.sh" 2>/dev/null || true
+  env ZED_WORKTREE_ROOT="$ROOT" "$HERE/compose-preview-clean.sh" --ensure || true
+fi
 
 # If the preview PNG (or any non-Kotlin tab) is focused, ZED_FILE is that
 # path and the task used to exit instantly — looks like "nothing happened".
@@ -178,7 +183,7 @@ print("no")
 PY
 }
 python3 - "$RENDERS" "$OUT_DIR" "$SHEET" "${NAMES[@]+${NAMES[@]}}" <<'PY'
-import os, sys, shutil
+import os, sys
 from pathlib import Path
 
 try:
@@ -206,13 +211,16 @@ if not pngs:
     print("no PNGs matched", file=sys.stderr)
     sys.exit(1)
 
-copied = []
-images = []
-for p in pngs:
-    dest = out_dir / p.name
-    shutil.copy2(p, dest)
-    copied.append(dest)
-    images.append(Image.open(dest).convert("RGBA"))
+# Stitch from Gradle output. Do not copy per-preview PNGs into .zed/
+# (those show up in Photos / gallery apps).
+copied = list(pngs)
+images = [Image.open(p).convert("RGBA") for p in copied]
+# Drop leftover copies from older runs.
+for leftover in out_dir.glob("*.png"):
+    if leftover.name != sheet.name:
+        leftover.unlink(missing_ok=True)
+for leftover in out_dir.glob("*.png.tmp"):
+    leftover.unlink(missing_ok=True)
 
 pad, label_h, gap = 24, 36, 28
 max_w = max(im.width for im in images)

@@ -1,10 +1,8 @@
 # zed-android+kmp-ide-config
 
-Zed as a light IDE for **Android + Kotlin + KMP/KMM**: JetBrains `kotlin-lsp`, one shared JDK with Gradle, tasks, and interactive TUI pickers (devices, Gradle tasks, iOS sims).
+Zed as a light IDE for **Android + Kotlin + KMP/KMM**: JetBrains `kotlin-lsp`, one shared JDK with Gradle, Compose Preview / stability / Layout Inspector, and interactive TUI pickers (devices, Gradle tasks, iOS sims, logcat).
 
 > GitHub repo slug is `zed-android-kmp-ide-config` (`+` is not allowed in GitHub names).
-
-Every registered task opens as a **center editor tab** (`use_new_terminal` + `reveal_target: center`) and **closes when it succeeds** (`hide: on_success`). Failures stay visible until you press Enter.
 
 ## Install
 
@@ -24,17 +22,40 @@ curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-kmp-ide-config/mai
 |---|---|
 | `--force` | overwrite project files (writes `.bak` first); also overwrite user settings |
 | `--no-user` | skip `~/.config/zed/settings.json` |
-| `--user-only` | only write user settings, skip project copy |
+| `--user-only` | only user settings + Zed extension, skip project copy |
+| `--no-lsp` | skip installing the compose-stability Zed extension |
 
-`install.sh` copies **every** helper under `scripts/`, writes `.zed/tasks.json` + `.zed/settings.json`, installs user Zed settings, and registers the **compose-stability** extension in Zed (`extension.wasm` → Application Support) so hover / diagnostics / inlays work after a reload.
+`install.sh` copies **every** file under `scripts/` (including `recomp-agent/` and `recomp-agent.dex`), writes `.zed/tasks.json` + `.zed/settings.json`, runs `compose-preview-clean.sh --ensure` (gitignore + no-index + Zed-exit cleaner), installs user Zed settings, registers the **compose-stability** extension, and offers **pidcat** + **Pillow** (needed to stitch preview PNGs).
 
-Does **not** install Xcode, Android SDK, or a JDK. If Homebrew is present, it can install **pidcat**.
+Does **not** install Xcode, Android SDK, or a JDK.
 
 Reload Zed (`zed: reload window`). Restart once so `kotlin-lsp` and `compose-stability` attach. Then **Cmd+Shift+R** for the task list.
 
-## Gradle in Zed
+## Features
 
-Zed has no standalone “Gradle” extension. This config stacks three pieces:
+### Kotlin language server
+
+Zed’s default fwcd `kotlin-language-server` red-squiggles Android/KMP (`R`, Compose, Gradle types). This config:
+
+1. Auto-installs the official **Kotlin** extension (`auto_install_extensions.kotlin`)
+2. Forces **`kotlin-lsp`** (JetBrains) and disables fwcd:
+
+```json
+"languages": {
+  "Kotlin": {
+    "language_servers": ["kotlin-lsp", "compose-stability", "!kotlin-language-server"]
+  }
+}
+```
+
+3. Passes the **same** `JAVA_HOME` / `ANDROID_HOME` into the LSP process and the terminal so Gradle does not spawn a second daemon.
+4. Caps **kotlin-lsp only** at **768 MB** (`_JAVA_OPTIONS=-Xmx768m` on `lsp.kotlin-lsp.binary.env` — not on the terminal). Restart Zed after install.
+
+Edit those paths in `user/settings.json` and `.zed/settings.json` if your machine differs.
+
+### Gradle in Zed
+
+Zed has no standalone “Gradle” extension. This config stacks:
 
 | Piece | Extension | What you get |
 |---|---|---|
@@ -45,82 +66,131 @@ Zed has no standalone “Gradle” extension. This config stacks three pieces:
 
 `install.sh` auto-installs `groovy` and `java` next to `kotlin` / `toml`.
 
-**One daemon rule:** terminal + kotlin-lsp + Gradle wrapper stay on **OpenJDK 17** (`JAVA_HOME` in settings). JDTLS *prefers* 21+; if it fails to start, install `openjdk@21` and point **only** `lsp.jdtls.settings.java_home` at 21 — do **not** change terminal `JAVA_HOME` or you get a second Gradle daemon.
+**One daemon rule:** terminal + kotlin-lsp + Gradle wrapper stay on **OpenJDK 17** (`JAVA_HOME` in settings). JDTLS *prefers* 21+; if it fails to start, install `openjdk@21` and point **only** `lsp.jdtls.settings.java_home` at 21 — do **not** change terminal `JAVA_HOME`.
 
-The Java extension may keep a Gradle language-server process warm. Use **Gradle: Stop daemons** / `./gradlew --stop` if RAM climbs.
+Use **Gradle: Stop daemons** / `./gradlew --stop` if RAM climbs.
 
-## Kotlin language server
+### Compose Preview (host PNG, no app plugin)
 
-Zed’s default fwcd `kotlin-language-server` red-squiggles Android/KMP (`R`, Compose, Gradle types). This config:
+Renders `@Preview` on the host via Yuri’s `ee.schimke.composeai.preview` **init script**. The app’s `build.gradle.kts` / version catalog stay clean.
 
-1. Auto-installs the official **Kotlin** extension (`auto_install_extensions.kotlin`)
-2. Forces **`kotlin-lsp`** (JetBrains) and disables fwcd:
+| Task | What it does |
+|---|---|
+| **Compose: Preview (this file)** | Robolectric PNGs for `@Preview` in the focused `.kt` |
+| **Compose: Preview + Blueprint (this file)** | same + Blueprint measurement overlays |
+| **Compose: Preview all + Blueprint** | every preview in the module (slow first run) |
+| **Compose: Preview watch** | stays running; debounce 1.5s; re-renders on **save** or focused `@Preview` file |
+| **Compose: Preview clean** | delete leftover per-preview PNGs (keeps `_all.png`) |
 
-```json
-"languages": {
-  "Kotlin": {
-    "language_servers": ["kotlin-lsp", "!kotlin-language-server"]
-  }
-}
+Output is **one** gallery: `.zed/compose-preview/_all.png` (Zed PNG tabs zoom; SVG preview does not). Per-preview PNGs stay in Gradle `build/` and are **not** copied next to `_all.png`.
+
+If that image tab is already open, the script **overwrites in place** and does not open a second tab. Drag `_all.png` to the right pane once.
+
+#### No extra files on new projects
+
+`compose-preview-zed.sh`, watch, and `install.sh` all call `scripts/compose-preview-clean.sh --ensure`. That is enough for a fresh repo:
+
+- writes `.nomedia`, `.metadata_never_index`, `CACHEDIR.TAG` under `.zed/compose-preview/` and `.zed/generated/` (Spotlight / Photos / Android galleries skip them)
+- appends `.zed/compose-preview*` and `.zed/generated/` to the project `.gitignore` if missing
+- starts one Zed-exit waiter per project (cleans leftover PNGs a few seconds after Zed is gone)
+
+You do **not** add those markers by hand. Flags: `--ensure` · `--intermediates` · `--purge` · `--when-zed-exits`.
+
+Preview tasks use the **bottom dock** (`reveal: no_focus`) and **hide on success**. Watch stays open until you stop it.
+
+Needs **Python 3.9+** and **Pillow**. Gradle must be able to resolve `ee.schimke.composeai.preview` (applied only by `scripts/compose-preview.init.gradle`). Pin note: the init script forces `androidx.core` 1.18.0 so compileSdk 36 / AGP 9.0 still check AAR metadata.
+
+```bash
+scripts/compose-preview-zed.sh              # focused file via $ZED_FILE
+scripts/compose-preview-zed.sh --blueprint
+scripts/compose-preview-zed.sh --all
+COMPOSE_PREVIEW_DEBOUNCE=2 scripts/compose-preview-watch.sh
+scripts/compose-preview-clean.sh --ensure   # also run by install + every preview
 ```
 
-3. Passes the **same** `JAVA_HOME` / `ANDROID_HOME` into the LSP process and the terminal so Gradle does not spawn a second daemon.
-4. Caps **kotlin-lsp only** at **768 MB** (`_JAVA_OPTIONS=-Xmx768m` on `lsp.kotlin-lsp.binary.env` — not on the terminal, so `./gradlew` is unchanged). Default IntelliJ vmoptions is `-Xmx2048m`. Restart Zed (or restart `kotlin-lsp`) after install.
+Zed has **no HTML preview tab**. Markdown/SVG/PNG only.
 
-Edit those paths in `user/settings.json` and `.zed/settings.json` if your machine differs.
+### Compose compiler stability
 
-## What’s included
+**Compose: Stability report** writes skippable / unstable params (`*/compose_compiler/*-composables.txt`) without editing `build.gradle`. The **compose-stability** Zed extension hovers `@Composable` names, warns on unstable / not skippable, and shows inlays.
+
+`install.sh` copies prebuilt `zed-extension/compose-stability/extension.wasm` (`wasm32-wasip2`) into Zed’s extension index. `--no-lsp` skips that.
+
+1. Run **Compose: Stability report** once.
+2. Reload Zed. Hover composables.
+
+Rebuild wasm: `rustup target add wasm32-wasip2 && cargo build --target wasm32-wasip2 --release`.
+
+### Layout Inspector + live recomposition
+
+**Android: Layout Inspector** — tree + per-composable counts (`c` toggles counts). Talks to a **debug APK** over JDWP (`scripts/jdwp_min.py` + `recomp-agent.dex`). No app source change.
+
+### Devices, logcat, iOS, Gradle pickers
+
+| Task | Role |
+|---|---|
+| **Android: Devices & emulators** | ↑↓ AVD/USB: start/stop, logcat, new/delete AVD |
+| **Emulator: Start small_phone (lite)** | 1 GB / 2 cores / no snapshot (edit AVD name in the task) |
+| **Android: Install & Launch Debug App** | `:app:installDebug` then `am start` |
+| **Logcat: pidcat** (app / emulator / device / errors) | colored; tag + multi-select levels |
+| **Gradle: Tasks (filter & run)** | type-to-filter all Gradle tasks |
+| **iOS: Simulators** | existing `xcrun simctl` only — **never** installs Xcode |
+| **Android: Unit Tests** | `:app:testDebugUnitTest` |
+| **Gradle: Clean** / **Gradle: Stop daemons** | wrapper tasks |
+
+## What’s installed
 
 | Path | Role |
 |---|---|
-| `user/settings.json` | Full user Zed settings (kotlin-lsp, docks, fonts, theme, extensions, JDK/SDK env) |
+| `user/settings.json` | User Zed settings (kotlin-lsp, docks, fonts, theme, extensions, JDK/SDK env) |
 | `.zed/settings.json` | Project overlay: kotlin-lsp + terminal env |
-| `.zed/tasks.json` | Install+launch, pidcat, pickers, tests, clean |
-| `scripts/android-device-picker.sh` | ↑↓ AVD/USB: start/stop, logcat, new/delete AVD |
-| `scripts/android-install-launch.sh` | `:app:installDebug` then launch (fails if `am start` errors) |
-| `scripts/android-app-id.sh` | Reads `applicationId` from this project |
-| `scripts/pidcat-app.sh` | Colored logcat: tag (empty=all) then multi-select levels |
-| `scripts/gradle-task-picker.sh` | Type-to-filter all Gradle tasks, Enter to run |
-| `scripts/ios-simulator-picker.sh` | ↑↓ existing sims only — **never** installs Xcode |
-| `scripts/interactive_inspector_recomp.py` | Layout inspector + live recomposition counts (`c` toggles counts; debug APK, no app source) |
-| `scripts/compose-preview-zed.sh` | Host `@Preview` → PNG; `--init-script` so the app Gradle files are not edited |
-| `scripts/compose-preview.init.gradle` | **Applies** `ee.schimke.composeai.preview` (not in the app), Blueprint dep, generated debug sources |
-| `scripts/compose-blueprint-previews.py` | Writes Blueprint companions under `.zed/generated/` (not `app/src`) |
-| `scripts/compose-stability-report.sh` | Compose compiler stability TUI (skippable / unstable params; no build.gradle edit) |
-| `scripts/compose-stability-lsp.py` | Tiny LSP: hover + diagnostics + inlays from those reports |
-| `zed-extension/compose-stability/` | Zed extension that starts the LSP for Kotlin |
+| `.zed/tasks.json` | Every task listed above |
+| `scripts/android-device-picker.sh` | Device / AVD TUI |
+| `scripts/android-install-launch.sh` | installDebug + launch |
+| `scripts/android-app-id.sh` | Reads `applicationId` (`app/`, `androidApp/`, `composeApp/`) |
+| `scripts/pidcat-app.sh` / `pidcat-app.py` | Colored logcat |
+| `scripts/gradle-task-picker.sh` | Gradle task TUI |
+| `scripts/ios-simulator-picker.sh` | Simulator TUI |
+| `scripts/interactive_inspector_recomp.py` | Layout inspector TUI |
+| `scripts/jdwp_min.py` | JDWP helper for inspector |
+| `scripts/recomp-agent.dex` + `recomp-agent/` | Recomposition agent (prebuilt + source) |
+| `scripts/compose-preview-zed.sh` | Host `@Preview` → `_all.png` |
+| `scripts/compose-preview-watch.sh` | Debounced watch (Python 3.9) |
+| `scripts/compose-preview-clean.sh` | `--ensure` (no-index + gitignore + waiter); `--intermediates`; `--purge`; `--when-zed-exits` |
+| `scripts/compose-preview.init.gradle` | Applies preview plugin + Blueprint **without** app Gradle edits |
+| `scripts/compose-blueprint-previews.py` | Blueprint companions under `.zed/generated/` |
+| `scripts/compose-stability-report.sh` / `.py` | Stability TUI |
+| `scripts/compose-reports.init.gradle` | Compose compiler reports via init script |
+| `scripts/compose-stability-lsp.py` | Tiny LSP: hover + diagnostics + inlays |
+| `scripts/compose-recomposition.sh` / `.py` | CLI recomposition helper |
+| `zed-extension/compose-stability/` | Zed extension that starts the stability LSP |
+
+Generated (gitignored by install): `.zed/compose-preview/`, `.zed/generated/`.
 
 ### User settings copied from this machine
 
 - Panels: git / debugger / project / outline **left**; agent **right**; terminal dock **left**
 - UI font 16 / buffer 15 / One Dark
 - Auto-install extensions: `html`, `kotlin`, `toml`, `groovy`, `java`
-- `kotlin-lsp` + `!kotlin-language-server`
+- `kotlin-lsp` + `compose-stability` + `!kotlin-language-server`
 - Terminal + LSP env: Homebrew OpenJDK 17 + `android-commandlinetools`
 
-## Tasks
+## Tasks (Cmd+Shift+R)
+
+Interactive pickers and inspector open as a **center** tab and **close on success**. Compose Preview one-shots stay in the **dock** and hide on success. **Compose: Preview watch** stays until you stop it.
 
 - **Android: Layout Inspector** — tree + per-composable counts (`c` on/off)
-- **Compose: Preview (this file)** — Robolectric PNGs for `@Preview` in the active tab → `.zed/compose-preview.md`
-- **Compose: Preview + Blueprint (this file)** — same, plus generated Blueprint measurement overlays
-- **Compose: Preview all + Blueprint** — every preview in the module (slow first run)
-- **Compose: Stability report** — compiler skippable/unstable report (`i` issues/all)
-
-### Compose stability in the editor (LSP)
-
-`install.sh` installs the prebuilt `zed-extension/compose-stability/extension.wasm` (must be **wasm32-wasip2** / component) and registers it in Zed’s extension index. Settings already list `compose-stability` next to `kotlin-lsp`.
-
-Then:
-
-1. Run **Compose: Stability report** once (`*/compose_compiler/*-composables.txt`).
-2. Reload Zed. Hover `@Composable` names: skippable + param table; warning if unstable / not skippable; inlays on the function and params.
-
-`--no-lsp` skips the extension copy. Rebuild wasm with `rustup target add wasm32-wasip2 && cargo build --target wasm32-wasip2 --release` (wasip1 is rejected by Zed).
-- **Android: Install & Launch Debug App** — `:app:installDebug` + launch
-- **Logcat: pidcat** (app / emulator / device / errors) — colored
+- **Compose: Preview clean** — delete leftover per-preview PNGs (keep `_all.png`)
+- **Compose: Preview watch** — auto refresh on save / focused `@Preview` file (1.5s debounce)
+- **Compose: Preview (this file)** — `_all.png` for previews in the active tab
+- **Compose: Preview + Blueprint (this file)** — plus measurement overlays
+- **Compose: Preview all + Blueprint** — whole module
+- **Compose: Stability report** — skippable / unstable (`i` issues/all)
+- **Android: Install & Launch Debug App**
+- **Logcat: pidcat** (app / emulator / device / errors)
 - **Android: Devices & emulators**
 - **Gradle: Tasks (filter & run)**
-- **iOS: Simulators** (will not install Xcode)
+- **iOS: Simulators**
 - **Emulator: Start small_phone (lite)**
 - **Android: Unit Tests** / **Gradle: Clean** / **Gradle: Stop daemons**
 
@@ -131,25 +201,31 @@ Defaults match Homebrew on Apple Silicon:
 - `JAVA_HOME` → `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
 - `ANDROID_HOME` / `ANDROID_SDK_ROOT` → `/opt/homebrew/share/android-commandlinetools`
 
-App id is read from the project's `applicationId` in Gradle (`app/`, `androidApp/`, or `composeApp/`). Override with `ANDROID_APP_ID` if needed.
+App id is read from the project's `applicationId`. Override with `ANDROID_APP_ID` if needed.
 
 ```bash
 scripts/android-app-id.sh
 scripts/pidcat-app.sh -t OverlayService -l WE
 ```
 
+Module for preview: `ANDROID_MODULE=app` (default). Debounce: `COMPOSE_PREVIEW_DEBOUNCE=1.5`.
+
 ## Picker keys
 
 **Devices:** ↑↓ · Enter · `n` new AVD · `d` delete · `r` refresh · `q` quit  
 **Gradle:** type to filter · ↑↓ · Enter · Ctrl+R refresh · Esc quit  
 **iOS:** ↑↓ · Enter (boot/shutdown) · `r` · `q` — existing `xcrun simctl` only  
-**Logcat:** type tag (empty = all, `apple|banana` = contains any) · Enter · Space toggle levels · Enter start · q cancel
+**Logcat:** type tag (empty = all, `apple|banana` = contains any) · Enter · Space toggle levels · Enter start · q cancel  
+**Inspector:** `c` toggle recomposition counts  
+**Stability:** `i` issues / all
 
 ## Optional tools
 
-- Colored logcat via `scripts/pidcat-app.py` — tag (empty=all), then multi-select levels. App id from Gradle.
+- **pidcat** — `install.sh` offers `brew install pidcat`
+- **Pillow** — `install.sh` offers `python3 -m pip install --user Pillow` (preview gallery stitch)
 - `emulator` + `adb` on `PATH` (from `ANDROID_HOME`)
 - Xcode only if you already have it
+- Python 3.9+ (macOS system Python is fine)
 
 ## License
 

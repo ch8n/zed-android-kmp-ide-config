@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Install Zed Android+KMP config: user settings, project tasks, scripts, Compose LSP.
+# Install Zed Android+KMP config: settings, every helper script, all tasks,
+# Compose Preview / watch / stability LSP, inspector + recomp agent.
 # Usage:
 #   ./install.sh [project-dir]
 #   ./install.sh --force ~/code/my-app
 #   ./install.sh --user-only
 #   curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-kmp-ide-config/main/install.sh | bash -s -- --force [project-dir]
 #
-# Does not install Xcode, Android SDK, or JDK. Optional: Homebrew pidcat.
+# Does not install Xcode, Android SDK, or JDK.
+# Optional: Homebrew pidcat, pip Pillow (preview PNG stitch).
 set -euo pipefail
 
 REPO_SLUG="ch8n/zed-android-kmp-ide-config"
@@ -19,7 +21,7 @@ TARGET=""
 
 usage() {
   cat <<EOF
-install.sh — Zed Android+KMP: kotlin-lsp, all tasks, picker scripts, Compose stability LSP
+install.sh — Zed Android+KMP: kotlin-lsp, every task + script, Compose Preview/watch/stability, inspector
 
 Usage:  install.sh [--force] [--no-user] [--user-only] [--no-lsp] [project-dir]
 
@@ -30,14 +32,15 @@ Usage:  install.sh [--force] [--no-user] [--user-only] [--no-lsp] [project-dir]
   --no-lsp      skip installing the compose-stability Zed extension
 
 Installs:
-  • ~/.config/zed/settings.json  (kotlin-lsp, compose-stability, JDK/SDK env)
-  • <project>/.zed/tasks.json    (Layout Inspector, stability, pidcat, pickers…)
+  • ~/.config/zed/settings.json   (kotlin-lsp, compose-stability, JDK/SDK env)
+  • <project>/.zed/tasks.json     (Preview, watch, inspector, stability, pidcat, pickers)
   • <project>/.zed/settings.json
-  • <project>/scripts/           (all Android/KMP helper scripts)
+  • <project>/scripts/            (every helper, including recomp-agent + init Gradle)
+  • <project>/.gitignore + .zed/compose-preview no-index (via compose-preview-clean.sh --ensure)
   • Zed extension compose-stability (hover / diagnostics / inlays)
+  • optional: pidcat (brew), Pillow (pip --user) for preview PNG stitch
 
 Does not install or update Xcode / Android SDK / JDK.
-If Homebrew is present and pidcat is missing, offers to install pidcat.
 EOF
 }
 
@@ -152,7 +155,7 @@ install_project() {
   install_file "$SRC/.zed/tasks.json" "$TARGET/.zed/tasks.json"
   install_file "$SRC/.zed/settings.json" "$TARGET/.zed/settings.json"
 
-  echo "  scripts (Android / KMP helpers + inspector + stability)"
+  echo "  scripts (preview, watch, inspector, stability, pickers, recomp-agent)"
   local rel
   while IFS= read -r rel; do
     rel="${rel#./}"
@@ -165,7 +168,16 @@ install_project() {
       ! -name '*.pyc' \
       ! -path '*/__pycache__/*'
   )
-  chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/"*.py 2>/dev/null || true
+  # Nested paths (recomp-agent/build.sh) plus top-level helpers.
+  find "$TARGET/scripts" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} + 2>/dev/null || true
+
+  if [ -f "$TARGET/scripts/compose-preview-clean.sh" ]; then
+    chmod +x "$TARGET/scripts/compose-preview-clean.sh" 2>/dev/null || true
+    env ZED_WORKTREE_ROOT="$TARGET" "$TARGET/scripts/compose-preview-clean.sh" --ensure || true
+    echo "  preview  no-index + gitignore + zed-exit cleaner"
+  else
+    merge_gitignore
+  fi
 
   if [ -d "$SRC/zed-extension/compose-stability" ]; then
     mkdir -p "$TARGET/zed-extension/compose-stability/src"
@@ -283,6 +295,54 @@ PY
   fi
 }
 
+merge_gitignore() {
+  local gi="$TARGET/.gitignore"
+  local block
+  block=$(cat <<'EOF'
+.zed/compose-preview.md
+.zed/compose-preview.html
+.zed/compose-preview/
+.zed/generated/
+EOF
+)
+  mkdir -p "$TARGET"
+  if [ ! -f "$gi" ]; then
+    printf '%s\n' "$block" >"$gi"
+    echo "  wrote   $gi (preview output ignores)"
+    return 0
+  fi
+  local line added=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if ! grep -qxF "$line" "$gi"; then
+      printf '%s\n' "$line" >>"$gi"
+      added=1
+    fi
+  done <<<"$block"
+  if [ "$added" -eq 1 ]; then
+    echo "  updated $gi (preview output ignores)"
+  else
+    echo "  ok      $gi already ignores preview output"
+  fi
+}
+
+maybe_pillow() {
+  if ! need_cmd python3; then
+    echo "Pillow    skipped (python3 missing)"
+    return 0
+  fi
+  if python3 -c "from PIL import Image" >/dev/null 2>&1; then
+    echo "Pillow    ok"
+    return 0
+  fi
+  if confirm "Pillow not found (needed to stitch Compose Preview _all.png). pip install --user Pillow ?"; then
+    python3 -m pip install --user Pillow
+    echo "Pillow    installed"
+  else
+    echo "Pillow    skipped — Compose Preview gallery stitch will fail"
+  fi
+}
+
 maybe_pidcat() {
   if need_cmd pidcat; then
     echo "pidcat    ok ($(command -v pidcat))"
@@ -306,7 +366,7 @@ check_env() {
   if need_cmd python3; then
     echo "python3   ok  $(command -v python3)"
   else
-    echo "python3   MISSING — inspector, stability TUI, and LSP need python3"
+    echo "python3   MISSING — preview watch, inspector, stability TUI, and LSP need python3"
   fi
   if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
     echo "JAVA_HOME ok  $JAVA_HOME"
@@ -348,6 +408,7 @@ main() {
   if [ "$DO_PROJECT" -eq 1 ]; then
     install_project
     maybe_pidcat
+    maybe_pillow
     print_tasks "$TARGET/.zed/tasks.json"
   fi
   if [ "$DO_LSP" -eq 1 ]; then
@@ -362,9 +423,12 @@ main() {
   echo
   echo "done."
   echo "1. Restart Zed (or zed: reload window) so kotlin-lsp + compose-stability attach."
-  echo "2. Cmd+Shift+R → task list (Layout Inspector, Stability report, Devices, …)."
-  echo "3. First Compose: Stability report compile writes */compose_compiler/*-composables.txt"
-  echo "   then hover @Composable names for skippable / unstable params."
+  echo "2. Cmd+Shift+R → task list:"
+  echo "     Compose Preview / Preview watch / Blueprint,"
+  echo "     Stability report, Layout Inspector, Devices, pidcat, Gradle, iOS."
+  echo "3. Compose Preview writes .zed/compose-preview/_all.png (zoomable PNG tab)."
+  echo "   Drag that tab to the right pane once; later runs reuse it."
+  echo "4. Compose: Stability report once, then hover @Composable names."
   echo "edit JAVA_HOME / ANDROID_HOME in ~/.config/zed/settings.json if needed"
   echo "app id is read from Gradle applicationId (override ANDROID_APP_ID)"
 }

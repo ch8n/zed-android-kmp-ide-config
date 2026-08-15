@@ -9,31 +9,61 @@
     "hide": "on_success"
   },
   {
+    "label": "Compose: Preview clean",
+    "command": "bash",
+    "args": ["scripts/compose-preview-clean.sh"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": true,
+    "reveal": "no_focus",
+    "hide": "on_success"
+  },
+  {
+    "label": "Compose: Preview watch",
+    "command": "bash",
+    "args": ["scripts/compose-preview-watch.sh"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "no_focus",
+    "hide": "never",
+    "show_summary": true,
+    "show_command": true,
+    "save": "current"
+  },
+  {
     "label": "Compose: Preview (this file)",
     "command": "bash",
     "args": ["scripts/compose-preview-zed.sh"],
-    "use_new_terminal": true,
+    "use_new_terminal": false,
     "allow_concurrent_runs": false,
-    "reveal_target": "center",
-    "hide": "never"
+    "reveal": "no_focus",
+    "hide": "on_success",
+    "show_summary": true,
+    "show_command": true,
+    "save": "current"
   },
   {
     "label": "Compose: Preview + Blueprint (this file)",
     "command": "bash",
     "args": ["scripts/compose-preview-zed.sh", "--blueprint"],
-    "use_new_terminal": true,
+    "use_new_terminal": false,
     "allow_concurrent_runs": false,
-    "reveal_target": "center",
-    "hide": "never"
+    "reveal": "no_focus",
+    "hide": "on_success",
+    "show_summary": true,
+    "show_command": true,
+    "save": "current"
   },
   {
     "label": "Compose: Preview all + Blueprint",
     "command": "bash",
     "args": ["scripts/compose-preview-zed.sh", "--all", "--blueprint"],
-    "use_new_terminal": true,
+    "use_new_terminal": false,
     "allow_concurrent_runs": false,
-    "reveal_target": "center",
-    "hide": "never"
+    "reveal": "no_focus",
+    "hide": "on_success",
+    "show_summary": true,
+    "show_command": true,
+    "save": "current"
   },
   {
     "label": "Compose: Stability report",

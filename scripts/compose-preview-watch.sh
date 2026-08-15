@@ -26,6 +26,13 @@ if [ ! -f "$RENDER" ]; then
   exit 1
 fi
 
+CLEAN="$HERE/compose-preview-clean.sh"
+if [ -f "$CLEAN" ]; then
+  chmod +x "$CLEAN" 2>/dev/null || true
+  env ZED_WORKTREE_ROOT="$ROOT" "$CLEAN" --ensure || true
+  trap 'env ZED_WORKTREE_ROOT="$ROOT" "$CLEAN" --intermediates || true' EXIT INT TERM
+fi
+
 echo "compose preview watch  root=$ROOT  debounce=${DEBOUNCE}s"
 echo "save a .kt file or focus another @Preview file — stop the task to quit"
 
