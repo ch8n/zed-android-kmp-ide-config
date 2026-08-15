@@ -392,7 +392,7 @@ write_avd() {
   if [ "$profile" = "medium" ]; then
     ram=2048; disk=6G; w=1080; h=2400; den=420; cores=4
   else
-    ram=1536; disk=2G; w=720; h=1280; den=320; cores=2
+    ram=1024; disk=2G; w=540; h=960; den=240; cores=2
   fi
   play=false
   case "$tag" in *playstore*) play=true ;; esac
@@ -435,7 +435,7 @@ showDeviceFrame=no
 tag.id=${tag}
 tag.ids=${tag}
 target=${target}
-vm.heapSize=128
+vm.heapSize=64
 EOF
 }
 
@@ -448,7 +448,7 @@ create_avd_flow() {
   fi
   pick_list "New emulator — system image" "${IMG_LABEL[@]}" || { STATUS="create cancelled"; return; }
   pkg="${IMG_PKG[$PICK_INDEX]}"
-  pick_list "New emulator — profile" "small (lite 720p 1536M 2G)" "medium (1080p 2048M 6G)" || { STATUS="create cancelled"; return; }
+  pick_list "New emulator — profile" "small (lite 540p 1024M 2G)" "medium (1080p 2048M 6G)" || { STATUS="create cancelled"; return; }
   if [ "$PICK_INDEX" -eq 1 ]; then profile=medium; else profile=small; fi
   name="$(read_line "AVD name (letters, numbers, _ )" "${profile}_phone")"
   name="$(printf '%s' "$name" | tr -cd 'A-Za-z0-9_')"
@@ -490,7 +490,17 @@ start_avd() {
   # Detach from the picker's raw TTY / process group. Inheriting stdin or
   # staying in Zed's task group makes the emulator exit immediately.
   : >"$log"
-  nohup emulator -avd "$avd" -no-audio -no-boot-anim -gpu host -accel on \
+  local ram cores extra=""
+  ram="$(ini_get "$(avd_ini "$avd")" hw.ramSize)"
+  cores="$(ini_get "$(avd_ini "$avd")" hw.cpu.ncore)"
+  ram="${ram:-1536}"
+  cores="${cores:-2}"
+  # Emulator 37 bumps guest RAM to 2560 unless -memory is set. Stay lite.
+  if [ "$ram" -le 1536 ] 2>/dev/null; then
+    extra="-lowram -feature -Vulkan"
+  fi
+  nohup emulator -avd "$avd" -memory "$ram" -cores "$cores" $extra \
+    -no-audio -no-boot-anim -gpu host -accel on \
     -no-snapshot-load -no-snapshot-save -no-metrics \
     </dev/null >>"$log" 2>&1 &
   epid=$!

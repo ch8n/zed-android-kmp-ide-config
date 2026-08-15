@@ -99,7 +99,7 @@
     "command": "bash",
     "args": [
       "-lc",
-      "nohup emulator -avd small_phone -no-audio -no-boot-anim -gpu host -accel on -no-snapshot-load -no-snapshot-save -no-metrics </dev/null >/tmp/piximon-emu-small_phone.log 2>&1 & echo \"started small_phone pid $!  log /tmp/piximon-emu-small_phone.log\"; wait $! || { echo emulator exited; tail -20 /tmp/piximon-emu-small_phone.log; echo Press Enter to close; read -r _; exit 1; }"
+      "nohup emulator -avd small_phone -memory 1024 -cores 2 -lowram -feature -Vulkan -no-audio -no-boot-anim -gpu host -accel on -no-snapshot-load -no-snapshot-save -no-metrics </dev/null >/tmp/piximon-emu-small_phone.log 2>&1 & echo \"started small_phone pid $!  log /tmp/piximon-emu-small_phone.log\"; wait $! || { echo emulator exited; tail -20 /tmp/piximon-emu-small_phone.log; echo Press Enter to close; read -r _; exit 1; }"
     ],
     "use_new_terminal": true,
     "allow_concurrent_runs": false,
