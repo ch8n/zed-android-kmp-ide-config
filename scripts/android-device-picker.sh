@@ -471,26 +471,46 @@ create_avd_flow() {
   MODE=devices
 }
 
+avd_is_up() {
+  local want="$1" i
+  for i in "${!NAME[@]}"; do
+    if [ "${NAME[$i]}" = "$want" ] && [ "${STATE[$i]}" = "device" ]; then
+      printf '%s' "${SERIAL[$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 start_avd() {
-  local avd="$1"
+  local avd="$1" log epid serial i last
+  log="/tmp/piximon-emu-${avd}.log"
   STATUS="starting $avd (lite)…"
   draw_devices
-  emulator -avd "$avd" -no-audio -no-boot-anim -gpu host -accel on \
-    >/tmp/piximon-emu-"$avd".log 2>&1 &
-  disown 2>/dev/null || true
-  local i
+  # Detach from the picker's raw TTY / process group. Inheriting stdin or
+  # staying in Zed's task group makes the emulator exit immediately.
+  : >"$log"
+  nohup emulator -avd "$avd" -no-audio -no-boot-anim -gpu host -accel on \
+    </dev/null >>"$log" 2>&1 &
+  epid=$!
+  disown "$epid" 2>/dev/null || true
+  echo "$epid" >"/tmp/piximon-emu-${avd}.pid"
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     sleep 2
     collect
-    clamp_cur
-    if [ "${STATE[$CUR]}" = "device" ]; then
-      STATUS="$avd is up (${SERIAL[$CUR]})"
+    if serial="$(avd_is_up "$avd")"; then
+      STATUS="$avd is up ($serial)"
       return
     fi
-    STATUS="booting $avd… ($i)  log /tmp/piximon-emu-${avd}.log"
+    if ! kill -0 "$epid" 2>/dev/null; then
+      last="$(tail -5 "$log" 2>/dev/null | tr '\n' ' ')"
+      STATUS="emulator exited (pid $epid). $last"
+      return
+    fi
+    STATUS="booting $avd… ($i)  log $log"
     draw_devices
   done
-  STATUS="still booting — check emulator window / log"
+  STATUS="still booting — check emulator window / $log"
 }
 
 stop_emu() {
