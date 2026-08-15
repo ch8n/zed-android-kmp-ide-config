@@ -4,16 +4,24 @@ Zed workspace config for Android / Kotlin / KMP: tasks, JDK/SDK env, and interac
 
 Designed so **Zed + CLI + Gradle share one JDK** (no extra daemons). Interactive pickers open as **center editor tabs**. Failures stay visible (`hide: on_success` + Enter to close).
 
-## Copy into a project
+## Install
+
+From a clone:
 
 ```bash
-# from your Android/KMP repo root
-cp -R /path/to/zed-android-ide-config/.zed .
-cp -R /path/to/zed-android-ide-config/scripts .
-chmod +x scripts/*.sh
+./install.sh /path/to/your-android-or-kmp-project
+# or, inside the project:
+./install.sh --force .
 ```
 
-Or clone next to the project and symlink.
+One-liner (clones this repo to a temp dir, then copies files):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-ide-config/main/install.sh | bash -s -- --force /path/to/your-project
+```
+
+`--force` overwrites existing `.zed` / picker scripts (writes `.bak` first).  
+Does **not** install Xcode, Android SDK, or a JDK. If Homebrew is present, it can install **pidcat**.
 
 Reload Zed tasks (`task: spawn` / Cmd+Shift+R).
 
