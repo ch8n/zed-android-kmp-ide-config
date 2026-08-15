@@ -63,6 +63,7 @@ Zed’s default fwcd `kotlin-language-server` red-squiggles Android/KMP (`R`, Co
 ```
 
 3. Passes the **same** `JAVA_HOME` / `ANDROID_HOME` into the LSP process and the terminal so Gradle does not spawn a second daemon.
+4. Caps **kotlin-lsp only** at **768 MB** (`_JAVA_OPTIONS=-Xmx768m` on `lsp.kotlin-lsp.binary.env` — not on the terminal, so `./gradlew` is unchanged). Default IntelliJ vmoptions is `-Xmx2048m`. Restart Zed (or restart `kotlin-lsp`) after install.
 
 Edit those paths in `user/settings.json` and `.zed/settings.json` if your machine differs.
 
