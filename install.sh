@@ -109,7 +109,8 @@ install_user_settings() {
   cp "$SRC/user/settings.json" "$USER_SETTINGS"
   echo "  wrote   $USER_SETTINGS"
   echo "  kotlin  kotlin-lsp enabled, fwcd kotlin-language-server disabled"
-  echo "  ext     auto_install html, kotlin, toml"
+  echo "  gradle  groovy + java extensions (Gradle LSP / JDTLS), *.gradle file types"
+  echo "  ext     auto_install html, kotlin, toml, groovy, java"
 }
 
 install_project() {

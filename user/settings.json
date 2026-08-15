@@ -4,6 +4,8 @@
 //
 // Kotlin: official JetBrains kotlin-lsp (extension id "kotlin").
 // fwcd/kotlin-language-server is disabled — it red-squiggles Android/KMP.
+// Gradle: "groovy" highlights .gradle; "java" ships Microsoft Gradle LSP + JDTLS.
+// JDTLS prefers JDK 21+; Gradle daemon must stay on 17 (JAVA_HOME below).
 {
   "git_panel": {
     "dock": "left"
@@ -32,7 +34,14 @@
   "auto_install_extensions": {
     "html": true,
     "kotlin": true,
-    "toml": true
+    "toml": true,
+    "groovy": true,
+    "java": true
+  },
+  "file_types": {
+    "Groovy": ["*.gradle"],
+    "Kotlin": ["*.gradle.kts", "*.kt", "*.kts"],
+    "TOML": ["*.toml", "gradle/libs.versions.toml"]
   },
   "languages": {
     "Kotlin": {
@@ -46,6 +55,41 @@
           "JAVA_HOME": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
           "ANDROID_HOME": "/opt/homebrew/share/android-commandlinetools",
           "ANDROID_SDK_ROOT": "/opt/homebrew/share/android-commandlinetools"
+        }
+      }
+    },
+    "jdtls": {
+      "settings": {
+        "java_home": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
+        "lombok_support": false,
+        "initialization_options": {
+          "settings": {
+            "java": {
+              "import": {
+                "gradle": {
+                  "enabled": true,
+                  "wrapper": {
+                    "enabled": true
+                  },
+                  "java": {
+                    "home": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+                  }
+                },
+                "maven": {
+                  "enabled": false
+                }
+              },
+              "configuration": {
+                "runtimes": [
+                  {
+                    "name": "JavaSE-17",
+                    "path": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
+                    "default": true
+                  }
+                ]
+              }
+            }
+          }
         }
       }
     }

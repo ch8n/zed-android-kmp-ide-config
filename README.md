@@ -30,6 +30,23 @@ Does **not** install Xcode, Android SDK, or a JDK. If Homebrew is present, it ca
 
 Reload Zed (`task: spawn` / Cmd+Shift+R). Restart Zed once so `kotlin-lsp` attaches.
 
+## Gradle in Zed
+
+Zed has no standalone “Gradle” extension. This config stacks three pieces:
+
+| Piece | Extension | What you get |
+|---|---|---|
+| `*.gradle` | **groovy** | syntax for Groovy build scripts |
+| `*.gradle.kts` | **kotlin** (`kotlin-lsp`) | Kotlin DSL highlighting + completion |
+| `gradle/libs.versions.toml` | **toml** | version-catalog highlighting |
+| Gradle model / `build.gradle` intelligence | **java** (Microsoft Gradle LSP + JDTLS) | plugin-aware completions, wrapper import |
+
+`install.sh` auto-installs `groovy` and `java` next to `kotlin` / `toml`.
+
+**One daemon rule:** terminal + kotlin-lsp + Gradle wrapper stay on **OpenJDK 17** (`JAVA_HOME` in settings). JDTLS *prefers* 21+; if it fails to start, install `openjdk@21` and point **only** `lsp.jdtls.settings.java_home` at 21 — do **not** change terminal `JAVA_HOME` or you get a second Gradle daemon.
+
+The Java extension may keep a Gradle language-server process warm. Use **Gradle: Stop daemons** / `./gradlew --stop` if RAM climbs.
+
 ## Kotlin language server
 
 Zed’s default fwcd `kotlin-language-server` red-squiggles Android/KMP (`R`, Compose, Gradle types). This config:
@@ -64,7 +81,7 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 - Panels: git / debugger / project / outline **left**; agent **right**; terminal dock **left**
 - UI font 16 / buffer 15 / One Dark
-- Auto-install extensions: `html`, `kotlin`, `toml`
+- Auto-install extensions: `html`, `kotlin`, `toml`, `groovy`, `java`
 - `kotlin-lsp` + `!kotlin-language-server`
 - Terminal + LSP env: Homebrew OpenJDK 17 + `android-commandlinetools`
 

@@ -1,10 +1,18 @@
 // Workspace: same JDK as user settings / gradle.properties (no second daemon).
 // kotlin-lsp = JetBrains official; !kotlin-language-server disables fwcd.
+// groovy + java = Gradle file highlighting / Gradle LSP (JDTLS).
 {
   "auto_install_extensions": {
     "html": true,
     "kotlin": true,
-    "toml": true
+    "toml": true,
+    "groovy": true,
+    "java": true
+  },
+  "file_types": {
+    "Groovy": ["*.gradle"],
+    "Kotlin": ["*.gradle.kts", "*.kt", "*.kts"],
+    "TOML": ["*.toml", "gradle/libs.versions.toml"]
   },
   "languages": {
     "Kotlin": {
@@ -18,6 +26,32 @@
           "JAVA_HOME": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
           "ANDROID_HOME": "/opt/homebrew/share/android-commandlinetools",
           "ANDROID_SDK_ROOT": "/opt/homebrew/share/android-commandlinetools"
+        }
+      }
+    },
+    "jdtls": {
+      "settings": {
+        "java_home": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
+        "lombok_support": false,
+        "initialization_options": {
+          "settings": {
+            "java": {
+              "import": {
+                "gradle": {
+                  "enabled": true,
+                  "wrapper": {
+                    "enabled": true
+                  },
+                  "java": {
+                    "home": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+                  }
+                },
+                "maven": {
+                  "enabled": false
+                }
+              }
+            }
+          }
         }
       }
     }
