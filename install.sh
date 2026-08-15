@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Zed Android+KMP config: user settings (kotlin-lsp), project .zed, pickers.
+# Install Zed Android+KMP config: user settings, project tasks, scripts, Compose LSP.
 # Usage:
 #   ./install.sh [project-dir]
 #   ./install.sh --force ~/code/my-app
@@ -14,21 +14,30 @@ REPO_URL="https://github.com/${REPO_SLUG}.git"
 FORCE=0
 DO_USER=1
 DO_PROJECT=1
+DO_LSP=1
 TARGET=""
 
 usage() {
   cat <<EOF
-install.sh — Zed Android+KMP: kotlin-lsp settings, tasks, picker scripts
+install.sh — Zed Android+KMP: kotlin-lsp, all tasks, picker scripts, Compose stability LSP
 
-Usage:  install.sh [--force] [--no-user] [--user-only] [project-dir]
+Usage:  install.sh [--force] [--no-user] [--user-only] [--no-lsp] [project-dir]
 
   project-dir   Android/KMP repo root (default: current directory)
   --force       overwrite without prompting (still writes .bak)
   --no-user     do not write ~/.config/zed/settings.json
-  --user-only   only write user settings (skip project files)
+  --user-only   only user settings + Zed extension (skip project files)
+  --no-lsp      skip installing the compose-stability Zed extension
+
+Installs:
+  • ~/.config/zed/settings.json  (kotlin-lsp, compose-stability, JDK/SDK env)
+  • <project>/.zed/tasks.json    (Layout Inspector, stability, pidcat, pickers…)
+  • <project>/.zed/settings.json
+  • <project>/scripts/           (all Android/KMP helper scripts)
+  • Zed extension compose-stability (hover / diagnostics / inlays)
 
 Does not install or update Xcode / Android SDK / JDK.
-If Homebrew is present and pidcat is missing, installs pidcat.
+If Homebrew is present and pidcat is missing, offers to install pidcat.
 EOF
 }
 
@@ -38,6 +47,7 @@ while [ $# -gt 0 ]; do
     -f|--force) FORCE=1; shift ;;
     --no-user) DO_USER=0; shift ;;
     --user-only) DO_PROJECT=0; DO_USER=1; shift ;;
+    --no-lsp) DO_LSP=0; shift ;;
     --) shift; break ;;
     -*) echo "unknown flag: $1" >&2; usage >&2; exit 2 ;;
     *) TARGET="$1"; shift ;;
@@ -68,6 +78,14 @@ confirm() {
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+zed_extensions_root() {
+  if [ "$(uname -s)" = "Darwin" ]; then
+    printf '%s' "${HOME}/Library/Application Support/Zed/extensions"
+  else
+    printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}/zed/extensions"
+  fi
+}
+
 SRC=""
 CLEANUP_SRC=""
 resolve_src() {
@@ -97,10 +115,25 @@ backup() {
   echo "  backup  ${f} -> ${f}.bak"
 }
 
+install_file() {
+  local src="$1" dest="$2"
+  [ -f "$src" ] || return 0
+  mkdir -p "$(dirname "$dest")"
+  if [ -e "$dest" ]; then
+    if ! confirm "overwrite $dest ?"; then
+      echo "  skip    $dest"
+      return 0
+    fi
+    backup "$dest"
+  fi
+  cp "$src" "$dest"
+  echo "  wrote   $dest"
+}
+
 install_user_settings() {
   mkdir -p "$USER_ZED"
   if [ -e "$USER_SETTINGS" ]; then
-    if ! confirm "overwrite ${USER_SETTINGS} (kotlin-lsp, docks, fonts, theme, env) ?"; then
+    if ! confirm "overwrite ${USER_SETTINGS} (kotlin-lsp, compose-stability, docks, fonts, env) ?"; then
       echo "skip user settings (kept existing)"
       return 0
     fi
@@ -108,72 +141,145 @@ install_user_settings() {
   fi
   cp "$SRC/user/settings.json" "$USER_SETTINGS"
   echo "  wrote   $USER_SETTINGS"
-  echo "  kotlin  kotlin-lsp enabled, fwcd kotlin-language-server disabled"
-  echo "  gradle  groovy + java extensions (Gradle LSP / JDTLS), *.gradle file types"
+  echo "  kotlin  kotlin-lsp + compose-stability; fwcd kotlin-language-server off"
+  echo "  gradle  groovy + java extensions (Gradle LSP / JDTLS)"
   echo "  ext     auto_install html, kotlin, toml, groovy, java"
 }
 
 install_project() {
   mkdir -p "$TARGET/.zed" "$TARGET/scripts"
 
-  if [ -e "$TARGET/.zed/tasks.json" ] || [ -e "$TARGET/.zed/settings.json" ]; then
-    if ! confirm "overwrite $TARGET/.zed/{tasks,settings}.json ?"; then
-      echo "skip .zed (kept existing)"
-    else
-      backup "$TARGET/.zed/tasks.json"
-      backup "$TARGET/.zed/settings.json"
-      cp "$SRC/.zed/tasks.json" "$TARGET/.zed/tasks.json"
-      cp "$SRC/.zed/settings.json" "$TARGET/.zed/settings.json"
-      echo "  wrote   $TARGET/.zed/tasks.json"
-      echo "  wrote   $TARGET/.zed/settings.json"
-    fi
-  else
-    cp "$SRC/.zed/tasks.json" "$TARGET/.zed/tasks.json"
-    cp "$SRC/.zed/settings.json" "$TARGET/.zed/settings.json"
-    echo "  wrote   $TARGET/.zed/tasks.json"
-    echo "  wrote   $TARGET/.zed/settings.json"
-  fi
+  install_file "$SRC/.zed/tasks.json" "$TARGET/.zed/tasks.json"
+  install_file "$SRC/.zed/settings.json" "$TARGET/.zed/settings.json"
 
-  local s
-  for s in \
-    android-device-picker.sh android-install-launch.sh android-app-id.sh \
-    pidcat-app.sh pidcat-app.py \
-    interactive_inspector_recomp.py \
-    compose-recomposition.py compose-recomposition.sh \
-    compose-stability-report.sh compose-stability-report.py compose-reports.init.gradle \
-    compose-stability-lsp.py \
-    jdwp_min.py recomp-agent.dex \
-    gradle-task-picker.sh ios-simulator-picker.sh
-  do
-    [ -f "$SRC/scripts/$s" ] || continue
-    if [ -e "$TARGET/scripts/$s" ]; then
-      if confirm "overwrite $TARGET/scripts/$s ?"; then
-        backup "$TARGET/scripts/$s"
-        cp "$SRC/scripts/$s" "$TARGET/scripts/$s"
-        echo "  wrote   $TARGET/scripts/$s"
-      else
-        echo "  skip    $TARGET/scripts/$s"
-      fi
-    else
-      cp "$SRC/scripts/$s" "$TARGET/scripts/$s"
-      echo "  wrote   $TARGET/scripts/$s"
-    fi
-  done
-  if [ -d "$SRC/scripts/recomp-agent" ]; then
-    mkdir -p "$TARGET/scripts/recomp-agent"
-    cp -R "$SRC/scripts/recomp-agent/." "$TARGET/scripts/recomp-agent/"
-    echo "  wrote   $TARGET/scripts/recomp-agent/"
-  fi
+  echo "  scripts (Android / KMP helpers + inspector + stability)"
+  local rel
+  while IFS= read -r rel; do
+    rel="${rel#./}"
+    [ -n "$rel" ] || continue
+    install_file "$SRC/scripts/$rel" "$TARGET/scripts/$rel"
+  done < <(
+    cd "$SRC/scripts"
+    find . -type f \
+      ! -path './.*' \
+      ! -name '*.pyc' \
+      ! -path '*/__pycache__/*'
+  )
   chmod +x "$TARGET/scripts/"*.sh "$TARGET/scripts/"*.py 2>/dev/null || true
+
   if [ -d "$SRC/zed-extension/compose-stability" ]; then
     mkdir -p "$TARGET/zed-extension/compose-stability/src"
-    cp "$SRC/zed-extension/compose-stability/extension.toml" "$TARGET/zed-extension/compose-stability/"
-    cp "$SRC/zed-extension/compose-stability/Cargo.toml" "$TARGET/zed-extension/compose-stability/"
+    install_file "$SRC/zed-extension/compose-stability/extension.toml" \
+      "$TARGET/zed-extension/compose-stability/extension.toml"
+    install_file "$SRC/zed-extension/compose-stability/Cargo.toml" \
+      "$TARGET/zed-extension/compose-stability/Cargo.toml"
     [ -f "$SRC/zed-extension/compose-stability/Cargo.lock" ] && \
-      cp "$SRC/zed-extension/compose-stability/Cargo.lock" "$TARGET/zed-extension/compose-stability/"
-    cp "$SRC/zed-extension/compose-stability/src/lib.rs" "$TARGET/zed-extension/compose-stability/src/"
+      install_file "$SRC/zed-extension/compose-stability/Cargo.lock" \
+        "$TARGET/zed-extension/compose-stability/Cargo.lock"
+    [ -f "$SRC/zed-extension/compose-stability/src/lib.rs" ] && \
+      install_file "$SRC/zed-extension/compose-stability/src/lib.rs" \
+        "$TARGET/zed-extension/compose-stability/src/lib.rs"
+    [ -f "$SRC/zed-extension/compose-stability/extension.wasm" ] && \
+      install_file "$SRC/zed-extension/compose-stability/extension.wasm" \
+        "$TARGET/zed-extension/compose-stability/extension.wasm"
     echo "  wrote   $TARGET/zed-extension/compose-stability/"
-    echo "  Zed: cmd-shift-p → 'zed: install dev extension' → that folder (once)."
+  fi
+}
+
+install_compose_stability_extension() {
+  local wasm="$SRC/zed-extension/compose-stability/extension.wasm"
+  local toml="$SRC/zed-extension/compose-stability/extension.toml"
+  if [ ! -f "$toml" ]; then
+    echo "  skip    compose-stability extension (source missing)"
+    return 0
+  fi
+  if [ ! -f "$wasm" ]; then
+    echo "  warn    no prebuilt extension.wasm — build with:"
+    echo "          rustup target add wasm32-wasip2 && cargo build --target wasm32-wasip2 --release"
+    echo "          (must be wasip2 / component, not wasip1)"
+    return 0
+  fi
+
+  local root dest
+  root="$(zed_extensions_root)"
+  dest="${root}/installed/compose-stability"
+  mkdir -p "$dest"
+  if [ -e "$dest/extension.wasm" ] && ! confirm "overwrite Zed extension $dest ?"; then
+    echo "  skip    $dest"
+  else
+    [ -e "$dest/extension.wasm" ] && backup "$dest/extension.wasm"
+    cp "$toml" "$dest/extension.toml"
+    cp "$wasm" "$dest/extension.wasm"
+    echo "  wrote   $dest/extension.toml"
+    echo "  wrote   $dest/extension.wasm"
+  fi
+
+  if ! need_cmd python3; then
+    echo "  warn    python3 missing — could not register extension in index.json"
+    return 0
+  fi
+  python3 - "$root" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+index_path = root / "index.json"
+entry = {
+    "manifest": {
+        "id": "compose-stability",
+        "name": "Compose Stability",
+        "version": "0.1.0",
+        "schema_version": 1,
+        "description": "Hover, diagnostics, and inlay hints from Compose compiler stability reports.",
+        "repository": None,
+        "authors": ["zed-android-kmp-ide-config"],
+        "lib": {"kind": "Rust", "version": "0.7.0"},
+        "themes": [],
+        "icon_themes": [],
+        "languages": [],
+        "grammars": {},
+        "language_servers": {
+            "compose-stability": {
+                "language": "Kotlin",
+                "languages": ["Kotlin"],
+                "language_ids": {},
+                "code_action_kinds": None,
+            }
+        },
+        "context_servers": {},
+        "slash_commands": {},
+        "snippets": None,
+        "capabilities": [],
+    },
+    "dev": False,
+}
+if index_path.is_file():
+    data = json.loads(index_path.read_text())
+else:
+    data = {"extensions": {}, "themes": {}, "icon_themes": {}, "languages": {}}
+data.setdefault("extensions", {})["compose-stability"] = entry
+index_path.write_text(json.dumps(data, indent=2) + "\n")
+print(f"  wrote   {index_path} (compose-stability registered)")
+PY
+}
+
+print_tasks() {
+  local tasks="$1"
+  [ -f "$tasks" ] || return 0
+  echo
+  echo "Zed tasks registered (Cmd+Shift+R):"
+  if need_cmd python3; then
+    python3 - "$tasks" <<'PY'
+import json, sys
+from pathlib import Path
+raw = Path(sys.argv[1]).read_text()
+# settings/tasks may have // comments — strip line comments for this file (tasks.json is pure JSON)
+data = json.loads(raw)
+for i, t in enumerate(data, 1):
+    print(f"  {i:2}. {t.get('label','?')}  →  {t.get('command','')} {' '.join(t.get('args') or [])}")
+PY
+  else
+    grep -o '"label": "[^"]*"' "$tasks" | sed 's/"label": /  • /'
   fi
 }
 
@@ -197,6 +303,11 @@ maybe_pidcat() {
 check_env() {
   echo
   echo "checks (informational — nothing is installed here)"
+  if need_cmd python3; then
+    echo "python3   ok  $(command -v python3)"
+  else
+    echo "python3   MISSING — inspector, stability TUI, and LSP need python3"
+  fi
   if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
     echo "JAVA_HOME ok  $JAVA_HOME"
   elif [ -x /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home/bin/java ]; then
@@ -227,7 +338,7 @@ main() {
   if [ "$DO_PROJECT" -eq 1 ]; then
     echo "target    $TARGET"
   else
-    echo "target    (user settings only)"
+    echo "target    (user settings + Zed extension)"
   fi
   resolve_src
   echo "source    $SRC"
@@ -237,14 +348,23 @@ main() {
   if [ "$DO_PROJECT" -eq 1 ]; then
     install_project
     maybe_pidcat
+    print_tasks "$TARGET/.zed/tasks.json"
+  fi
+  if [ "$DO_LSP" -eq 1 ]; then
+    echo
+    echo "Compose stability LSP (Zed extension)"
+    install_compose_stability_extension
   fi
   check_env
   if [ -n "$CLEANUP_SRC" ]; then
     rm -rf "$CLEANUP_SRC"
   fi
   echo
-  echo "done. Restart Zed once so kotlin-lsp attaches."
-  echo "Then Cmd+Shift+R → Gradle: Tasks / Android: Devices & emulators"
+  echo "done."
+  echo "1. Restart Zed (or zed: reload window) so kotlin-lsp + compose-stability attach."
+  echo "2. Cmd+Shift+R → task list (Layout Inspector, Stability report, Devices, …)."
+  echo "3. First Compose: Stability report compile writes */compose_compiler/*-composables.txt"
+  echo "   then hover @Composable names for skippable / unstable params."
   echo "edit JAVA_HOME / ANDROID_HOME in ~/.config/zed/settings.json if needed"
   echo "app id is read from Gradle applicationId (override ANDROID_APP_ID)"
 }

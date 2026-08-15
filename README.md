@@ -26,9 +26,11 @@ curl -fsSL https://raw.githubusercontent.com/ch8n/zed-android-kmp-ide-config/mai
 | `--no-user` | skip `~/.config/zed/settings.json` |
 | `--user-only` | only write user settings, skip project copy |
 
+`install.sh` copies **every** helper under `scripts/`, writes `.zed/tasks.json` + `.zed/settings.json`, installs user Zed settings, and registers the **compose-stability** extension in Zed (`extension.wasm` → Application Support) so hover / diagnostics / inlays work after a reload.
+
 Does **not** install Xcode, Android SDK, or a JDK. If Homebrew is present, it can install **pidcat**.
 
-Reload Zed (`task: spawn` / Cmd+Shift+R). Restart Zed once so `kotlin-lsp` attaches.
+Reload Zed (`zed: reload window`). Restart once so `kotlin-lsp` and `compose-stability` attach. Then **Cmd+Shift+R** for the task list.
 
 ## Gradle in Zed
 
@@ -100,13 +102,14 @@ Edit those paths in `user/settings.json` and `.zed/settings.json` if your machin
 
 ### Compose stability in the editor (LSP)
 
-Zed cannot load a custom LSP from `settings.json` alone. After install:
+`install.sh` installs the prebuilt `zed-extension/compose-stability/extension.wasm` (must be **wasm32-wasip2** / component) and registers it in Zed’s extension index. Settings already list `compose-stability` next to `kotlin-lsp`.
 
-1. Run **Compose: Stability report** once (writes `build/**/compose_compiler/*-composables.txt`).
-2. Command palette → **zed: install dev extension** → `zed-extension/compose-stability`.
-3. `.zed/settings.json` already lists `compose-stability` next to `kotlin-lsp`.
+Then:
 
-Then on `@Composable` functions: hover = skippable + param stability, yellow diagnostic if not skippable / unstable params, inlay `skippable` / `not skippable` and `stable` / `unstable` on params. Reload the window if the server does not attach.
+1. Run **Compose: Stability report** once (`*/compose_compiler/*-composables.txt`).
+2. Reload Zed. Hover `@Composable` names: skippable + param table; warning if unstable / not skippable; inlays on the function and params.
+
+`--no-lsp` skips the extension copy. Rebuild wasm with `rustup target add wasm32-wasip2 && cargo build --target wasm32-wasip2 --release` (wasip1 is rejected by Zed).
 - **Android: Install & Launch Debug App** — `:app:installDebug` + launch
 - **Logcat: pidcat** (app / emulator / device / errors) — colored
 - **Android: Devices & emulators**
