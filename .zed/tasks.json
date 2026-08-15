@@ -1,0 +1,122 @@
+[
+  {
+    "label": "Android: Assemble Debug",
+    "command": "./gradlew",
+    "args": ["assembleDebug"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "Android: Install & Launch Debug App",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "./gradlew installDebug && adb shell am start -n com.example.piximons/.MainActivity"
+    ],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "Logcat: pidcat (PixiMon)",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "pidcat -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
+    ],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "hide": "on_success"
+  },
+  {
+    "label": "Logcat: pidcat emulator only",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "pidcat -e -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
+    ],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "hide": "on_success"
+  },
+  {
+    "label": "Logcat: pidcat device only",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "pidcat -d -c com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
+    ],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "hide": "on_success"
+  },
+  {
+    "label": "Logcat: pidcat errors (E+)",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "pidcat -c -l E com.example.piximons || { echo; echo \"pidcat failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
+    ],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "hide": "on_success"
+  },
+  {
+    "label": "Android: Devices & emulators",
+    "command": "bash",
+    "args": ["scripts/android-device-picker.sh"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
+    "label": "Gradle: Tasks (filter & run)",
+    "command": "bash",
+    "args": ["scripts/gradle-task-picker.sh"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
+    "label": "iOS: Simulators",
+    "command": "bash",
+    "args": ["scripts/ios-simulator-picker.sh"],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
+    "label": "Android: Unit Tests",
+    "command": "./gradlew",
+    "args": [":app:testDebugUnitTest"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "Emulator: Start small_phone (lite)",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "emulator -avd small_phone -no-audio -no-boot-anim -gpu host -accel on || { echo; echo \"emulator failed ($?). Press Enter to close.\"; read -r _; exit 1; }"
+    ],
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal_target": "center"
+  },
+  {
+    "label": "Gradle: Clean",
+    "command": "./gradlew",
+    "args": ["clean"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "Gradle: Stop daemons",
+    "command": "./gradlew",
+    "args": ["--stop"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  }
+]
