@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Interactive Terminal Layout Inspector for Android / Jetpack Compose / KMP
-Deeply resolves Composable component hierarchies, expands internal Composable definitions
-down to maximum depth, and jumps directly to source code in Zed IDE.
+Universal AST expansion and clean toggle expand/collapse on ALL nodes across ANY screen.
+'e' expands/toggles the selected node.
+'c' collapses all back to root level.
+'Enter' jumps to source code in Zed IDE.
 """
 
 import curses
@@ -14,11 +16,35 @@ import xml.etree.ElementTree as ET
 from functools import lru_cache
 
 EXCLUDED_TYPES = {
-    "Modifier", "String", "Color", "Int", "Alignment", "Arrangement", "Unit", 
+    "Modifier", "String", "Color", "Int", "Alignment", "Arrangement", "Unit",
     "Pair", "List", "Set", "Map", "Boolean", "Float", "Double", "Long", "Dp",
     "OptIn", "Preview", "Composable", "DerivedStateOf", "Remember", "SideEffect",
-    "LaunchedEffect", "DisposableEffect", "IntOffset", "Offset", "Size", "Brush"
+    "LaunchedEffect", "DisposableEffect", "IntOffset", "Offset", "Size", "Brush",
+    "MutableInteractionSource", "ColorMatrix", "ColorFilter", "Paint", "Path",
+    "Random", "Sparkle", "Sparkles", "Matrix", "ContentScale", "LinearEasing",
+    "RepeatMode", "InfiniteTransition", "Activity", "Context", "Intent", "Uri",
+    "Settings", "ComponentName", "Lifecycle", "LifecycleOwner", "ShopCategory",
+    "MaterialTheme", "LocalContext", "LocalLifecycleOwner", "WindowInsets",
+    "GridCells", "ExperimentalLayoutApi", "Build", "Uri", "Intent",
+    "ActivityResultContracts", "HatchingUiState", "PermissionStep",
+    "PixelButtonVariant", "PixelSpacing", "ContentScale",
+    "StartActivityForResult", "LifecycleResumeEffect",
 }
+
+# Call-like PascalCase that is not a layout node
+EXCLUDED_CALLS = EXCLUDED_TYPES | {
+    "Intent", "Uri", "ComponentName", "Settings", "OverlayService",
+    "HatchingScreenActions", "DesignPreviewMocks", "PixiMonDesignPreviewTheme",
+}
+
+COMPOSE_CALL = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*[\(\{]")
+FUN_DECL = re.compile(
+    r"^\s*(?:(?:private|internal|public|protected|override|actual|expect)\s+)*"
+    r"fun\s+([A-Za-z0-9_]+)\s*\("
+)
+SAMPLE_ARG = re.compile(
+    r'(?:text|title|label|placeholder|contentDescription)\s*=\s*"([^"]+)"'
+)
 
 def find_project_root():
     curr = os.path.abspath(os.getcwd())
@@ -32,80 +58,242 @@ def find_project_root():
 
 PROJECT_ROOT = find_project_root()
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=1)
+def kotlin_source_files():
+    files = []
+    skip = {"build", ".gradle", ".git", ".idea", ".zed"}
+    for root, dirs, names in os.walk(PROJECT_ROOT):
+        dirs[:] = [d for d in dirs if d not in skip]
+        for name in names:
+            if name.endswith(".kt"):
+                files.append(os.path.join(root, name))
+    return files
+
+
+def _has_composable_annotation(lines, fun_idx):
+    start = max(0, fun_idx - 12)
+    chunk = "".join(lines[start : fun_idx + 1])
+    return "@Composable" in chunk
+
+
+@lru_cache(maxsize=512)
 def find_composable_definition(comp_name):
-    """Finds the source file and line where @Composable fun <comp_name> is defined."""
-    if not comp_name or comp_name in EXCLUDED_TYPES:
+    """@Composable fun <comp_name>(… ) — project source only, skip Preview/Test."""
+    if not comp_name or comp_name in EXCLUDED_CALLS:
         return None, None
-    
-    cmd = [
-        "grep", "-rnI",
-        "--include=*.kt",
-        "--exclude-dir=build", "--exclude-dir=.gradle", "--exclude-dir=.git", "--exclude-dir=.idea",
-        f"fun {comp_name}\\s*(", PROJECT_ROOT
-    ]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        for line in res.stdout.strip().split("\n"):
-            if line and "Preview" not in line and "Test" not in line:
-                m = re.match(r"^([^:]+):(\d+):", line)
-                if m:
-                    return m.group(1), int(m.group(2))
-    except Exception:
-        pass
+    for path in kotlin_source_files():
+        base = os.path.basename(path)
+        if "Preview" in base or "Test" in base:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                lines = fh.readlines()
+        except OSError:
+            continue
+        for idx, line in enumerate(lines):
+            m = FUN_DECL.match(line)
+            if not m or m.group(1) != comp_name:
+                continue
+            if "Preview" in line:
+                continue
+            if not _has_composable_annotation(lines, idx):
+                continue
+            return path, idx + 1
     return None, None
 
-@lru_cache(maxsize=128)
-def parse_composable_body_subnodes(file_path, start_line):
-    """Parses internal Composable function calls within a Composable body."""
-    subnodes = []
+
+def _mask_strings_and_comments(line, in_block_comment):
+    """Replace string/comment contents so brace counts ignore them."""
+    out = []
+    i = 0
+    n = len(line)
+    in_string = False
+    quote = ""
+    while i < n:
+        ch = line[i]
+        nxt = line[i + 1] if i + 1 < n else ""
+        if in_block_comment:
+            out.append(" ")
+            if ch == "*" and nxt == "/":
+                out.append(" ")
+                in_block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if in_string:
+            out.append(" ")
+            if ch == "\\" and nxt:
+                out.append(" ")
+                i += 2
+                continue
+            if ch == quote:
+                in_string = False
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            out.append(" " * (n - i))
+            break
+        if ch == "/" and nxt == "*":
+            in_block_comment = True
+            out.append("  ")
+            i += 2
+            continue
+        if ch in ('"', "'"):
+            in_string = True
+            quote = ch
+            out.append(" ")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out), in_block_comment
+
+
+def find_body_open(lines, start_idx):
+    """Index of the `{` that opens the function/call body after start_idx."""
+    paren = 0
+    in_block = False
+    for idx in range(start_idx, len(lines)):
+        masked, in_block = _mask_strings_and_comments(lines[idx], in_block)
+        for ch in masked:
+            if ch == "(":
+                paren += 1
+            elif ch == ")":
+                paren = max(0, paren - 1)
+            elif ch == "{" and paren == 0:
+                return idx
+    return None
+
+class ASTNode:
+    def __init__(self, name, line_no, file_path, sample_text=''):
+        self.name = name
+        self.line_no = line_no
+        self.file_path = file_path
+        self.sample_text = sample_text
+        self.children = []
+
+@lru_cache(maxsize=256)
+def parse_composable_block_at_line(file_path, target_line):
+    """Parse the full `{ ... }` body starting at target_line. No line cap."""
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
-        
-        start_idx = start_line - 1
-        # Scan body up to 100 lines or until matching closing brace
-        brace_count = 0
-        body_started = False
+    except OSError:
+        return []
 
-        for idx in range(start_idx, min(len(lines), start_idx + 120)):
-            line = lines[idx]
-            line_no = idx + 1
-            
-            if "{" in line:
-                brace_count += line.count("{")
-                body_started = True
-            if "}" in line:
-                brace_count -= line.count("}")
+    start_idx = max(0, int(target_line) - 1)
+    body_start_idx = find_body_open(lines, start_idx)
+    if body_start_idx is None:
+        return []
 
-            if body_started and brace_count <= 0 and idx > start_idx:
-                break
+    root_nodes = []
+    stack = []  # (node, brace_depth of that node's content lambda)
+    current_brace = 0
+    in_block = False
+    # Trailing-lambda only: Name(...) {  — not if/else/remember braces.
+    await_lambda = None  # ASTNode waiting for optional { after its ( ... )
+    call_parens = 0
 
-            # Find composable invocations
-            for m in re.finditer(r"\b([A-Z][A-Za-z0-9_]+)\s*[\(\{]", line):
-                name = m.group(1)
-                if name not in EXCLUDED_TYPES:
-                    # Extract sample text or argument if present
-                    arg_match = re.search(r'(?:text|title|label|placeholder|contentDescription)\s*=\s*"([^"]+)"', line)
-                    sample_text = arg_match.group(1) if arg_match else ""
-                    if not sample_text:
-                        str_match = re.search(r'"([^"]{2,30})"', line)
-                        if str_match and not str_match.group(1).startswith("android."):
-                            sample_text = str_match.group(1)
-                            
-                    subnodes.append({
-                        "name": name,
-                        "line_no": str(line_no),
-                        "file_path": file_path,
-                        "sample_text": sample_text
-                    })
-    except Exception:
-        pass
-    return subnodes
+    def attach(node):
+        if stack:
+            stack[-1][0].children.append(node)
+        else:
+            root_nodes.append(node)
+
+    for idx in range(body_start_idx, len(lines)):
+        raw = lines[idx]
+        line_no = idx + 1
+        masked, in_block = _mask_strings_and_comments(raw, in_block)
+        stripped = raw.strip()
+        skip_scan = (
+            idx == body_start_idx
+            or not stripped
+            or stripped.startswith("//")
+            or stripped.startswith("*")
+            or stripped.startswith("/*")
+        )
+
+        # Map masked index → composable start so we walk one stream.
+        call_at = {}
+        if not skip_scan:
+            for m in COMPOSE_CALL.finditer(raw):
+                cname = m.group(1)
+                if cname in EXCLUDED_CALLS or "Preview" in cname:
+                    continue
+                sample = ""
+                arg = SAMPLE_ARG.search(raw)
+                if arg:
+                    sample = arg.group(1)
+                else:
+                    sm = re.search(r'"([^"]{1,40})"', raw)
+                    if sm and not sm.group(1).startswith("android."):
+                        sample = sm.group(1)
+                call_at[m.start()] = ASTNode(cname, str(line_no), file_path, sample)
+
+        i = 0
+        while i < len(masked):
+            if i in call_at:
+                node = call_at[i]
+                attach(node)
+                # skip the identifier; next char in masked is ( or {
+                j = i
+                while j < len(masked) and (masked[j].isalnum() or masked[j] == "_"):
+                    j += 1
+                while j < len(masked) and masked[j] in " \t":
+                    j += 1
+                if j < len(masked) and masked[j] == "(":
+                    await_lambda = node
+                    call_parens = 1
+                    i = j + 1
+                    continue
+                if j < len(masked) and masked[j] == "{":
+                    stack.append((node, current_brace))
+                    current_brace += 1
+                    await_lambda = None
+                    call_parens = 0
+                    i = j + 1
+                    continue
+                i = j
+                continue
+
+            ch = masked[i]
+            if await_lambda is not None and call_parens > 0:
+                if ch == "(":
+                    call_parens += 1
+                elif ch == ")":
+                    call_parens -= 1
+                i += 1
+                continue
+
+            if await_lambda is not None and call_parens == 0:
+                if ch in " \t\n\r":
+                    i += 1
+                    continue
+                if ch == "{":
+                    stack.append((await_lambda, current_brace))
+                    current_brace += 1
+                    await_lambda = None
+                    i += 1
+                    continue
+                # Not a trailing lambda (next statement / if / else).
+                await_lambda = None
+
+            if ch == "{":
+                current_brace += 1
+            elif ch == "}":
+                current_brace -= 1
+                while stack and current_brace <= stack[-1][1]:
+                    stack.pop()
+                if current_brace <= 0:
+                    return root_nodes
+            i += 1
+
+    return root_nodes
 
 @lru_cache(maxsize=128)
 def parse_kotlin_composable_chain(file_path, target_line):
-    """Parses a Kotlin file and extracts the exact Composable parent hierarchy at target line."""
+    """Extracts Composable call stack at target line."""
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -136,75 +324,108 @@ def parse_kotlin_composable_chain(file_path, target_line):
 
     return stack, enclosing_function
 
+def _is_composable_source_hit(file_path, line_no, line_content):
+    """Only hits inside a real @Composable fun — skip catalogs / data classes."""
+    if not file_path.endswith(".kt"):
+        return False
+    base = os.path.basename(file_path)
+    if "Preview" in base or "Test" in base:
+        return False
+    stripped = line_content.strip()
+    if re.search(r"\b(data class|object |enum class)\b", stripped):
+        return False
+    _, enclosing = parse_kotlin_composable_chain(file_path, line_no)
+    if not enclosing:
+        return False
+    return bool(find_composable_definition(enclosing)[0])
+
+
+def _primary_layout_composable(chain):
+    """Last name in the chain that is actually @Composable fun in this project."""
+    for name, _ in reversed(chain):
+        if name in EXCLUDED_CALLS:
+            continue
+        path, _line = find_composable_definition(name)
+        if path:
+            return name
+    return None
+
+
 @lru_cache(maxsize=512)
 def resolve_composable_from_source(search_term):
-    """Searches for term in project source and extracts full Composable hierarchy."""
+    """Map visible text to a @Composable call site — never a data-class constructor."""
     if not search_term or len(search_term) < 2:
         return None
 
     cmd = [
         "grep", "-rnI",
-        "--include=*.kt", "--include=*.java", "--include=*.xml",
+        "--include=*.kt",
         "--exclude-dir=build", "--exclude-dir=.gradle", "--exclude-dir=.git", "--exclude-dir=.idea",
         search_term, PROJECT_ROOT
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True)
-        lines = [l for l in res.stdout.strip().split("\n") if l]
-        if not lines:
+        hits = [l for l in res.stdout.splitlines() if l]
+        parsed = []
+        for raw in hits:
+            match = re.match(r"^([^:]+):(\d+):(.*)$", raw)
+            if not match:
+                continue
+            file_path, line_no_str, line_content = match.group(1), match.group(2), match.group(3)
+            line_no = int(line_no_str)
+            if not _is_composable_source_hit(file_path, line_no, line_content):
+                continue
+            chain, enclosing_func = parse_kotlin_composable_chain(file_path, line_no)
+            primary = _primary_layout_composable(chain) or enclosing_func
+            parsed.append(
+                {
+                    "file_path": file_path,
+                    "line_no": str(line_no),
+                    "composable": primary,
+                    "enclosing": enclosing_func,
+                    "hierarchy_chain": [c[0] for c in chain],
+                    "line_content": line_content.strip(),
+                }
+            )
+        if not parsed:
             return None
-        
-        chosen_line = lines[0]
-        for l in lines:
-            if "Preview" not in l and "Test" not in l:
-                chosen_line = l
-                break
-
-        match = re.match(r"^([^:]+):(\d+):(.*)$", chosen_line)
-        if not match:
-            return None
-
-        file_path, line_no_str, line_content = match.group(1), match.group(2), match.group(3)
-        line_no = int(line_no_str)
-
-        chain, enclosing_func = parse_kotlin_composable_chain(file_path, line_no)
-        primary_comp = chain[-1][0] if chain else None
-        
-        return {
-            "file_path": file_path,
-            "line_no": str(line_no),
-            "composable": primary_comp,
-            "enclosing": enclosing_func,
-            "hierarchy_chain": [c[0] for c in chain],
-            "line_content": line_content.strip()
-        }
+        # Prefer a hit whose name has a project @Composable definition.
+        for item in parsed:
+            if item["composable"] and find_composable_definition(item["composable"])[0]:
+                return item
+        return parsed[0]
     except Exception:
         return None
 
 class UINode:
-    def __init__(self, elem=None, parent=None, depth=0, synthetic_info=None):
+    def __init__(self, elem=None, parent=None, depth=0, ast_node=None):
         self.parent = parent
         self.depth = depth
         self.children = []
-        self.expanded = True
+        self.expanded = False
+        self._source_resolved = False
+        self._def_loaded = False
 
-        if synthetic_info:
-            # Synthetic AST subnode from source code definition
+        if ast_node:
             self.attrib = {}
             self.raw_class = ""
-            self.class_name = synthetic_info.get("name", "Composable")
+            self.class_name = ast_node.name
             self.res_id = ""
-            self.text = synthetic_info.get("sample_text", "")
+            self.text = ast_node.sample_text
             self.content_desc = ""
             self.bounds = ""
             self.clickable = False
             self.is_synthetic = True
             
-            self.source_file = synthetic_info.get("file_path")
-            self.source_line = synthetic_info.get("line_no")
-            self.composable_name = synthetic_info.get("name")
+            self.source_file = ast_node.file_path
+            self.source_line = ast_node.line_no
+            self.composable_name = ast_node.name
             self.enclosing_screen = None
             self.hierarchy_chain = [self.composable_name]
+            self._source_resolved = True
+
+            for child_ast in ast_node.children:
+                self.children.append(UINode(parent=self, depth=depth + 1, ast_node=child_ast))
         else:
             self.attrib = elem.attrib if elem is not None else {}
             self.raw_class = self.attrib.get("class", "")
@@ -224,14 +445,17 @@ class UINode:
             self.composable_name = None
             self.enclosing_screen = None
             self.hierarchy_chain = []
-            
-            self._resolve_direct_source()
 
             if elem is not None:
                 for child_elem in elem:
                     self.children.append(UINode(child_elem, self, depth + 1))
 
-    def _resolve_direct_source(self):
+    def ensure_source_resolved(self):
+        """Universal source resolution for ANY node."""
+        if self._source_resolved:
+            return
+        self._source_resolved = True
+
         candidates = []
         if self.res_id:
             candidates.extend([f'"{self.res_id}"', f'testTag = "{self.res_id}"', f'testTag("{self.res_id}")', f'R.id.{self.res_id}'])
@@ -253,44 +477,82 @@ class UINode:
                 self.hierarchy_chain = info.get("hierarchy_chain", [])
                 break
 
-    def propagate_hierarchy(self):
-        """Propagates Composable names and synthesizes AST sub-trees for leaf composables."""
-        for child in self.children:
-            child.propagate_hierarchy()
+    def _adopt_ast_roots(self, ast_roots):
+        existing = {(c.composable_name, str(c.source_line)) for c in self.children}
+        added = False
+        for ast_root in ast_roots:
+            if ast_root.name == self.composable_name:
+                continue
+            key = (ast_root.name, str(ast_root.line_no))
+            if key in existing:
+                continue
+            self.children.append(UINode(parent=self, depth=self.depth + 1, ast_node=ast_root))
+            existing.add(key)
+            added = True
+        if added:
+            self.recalculate_depths(self.depth)
+        return added
 
-        # Inferred parent composable names from children
-        if not self.composable_name and self.children:
-            for child in self.children:
-                if child.hierarchy_chain:
-                    if len(child.hierarchy_chain) > 1:
-                        self.composable_name = child.hierarchy_chain[-2]
-                    elif child.enclosing_screen:
-                        self.composable_name = child.enclosing_screen
-                    
-                    self.source_file = child.source_file
-                    self.source_line = child.source_line
-                    self.enclosing_screen = child.enclosing_screen
-                    self.hierarchy_chain = child.hierarchy_chain[:-1]
-                    break
+    def _infer_composable_name(self):
+        """PixelButton etc. when uiautomator only gave Clickable/TextView."""
+        if self.composable_name and find_composable_definition(self.composable_name)[0]:
+            return self.composable_name
+        blob = " ".join(
+            t for t in [self.text] + [c.text for c in self.children] if t
+        ).upper()
+        if find_composable_definition("PixelButton")[0] and (
+            self.clickable or "Button" in (self.class_name or "")
+        ):
+            if any(k in blob for k in ("BUY", "OWNED", "NEED BITS", "HATCH", "SUMMON")):
+                return "PixelButton"
+        return self.composable_name
 
-        # If this is a named custom Composable and has NO accessibility children,
-        # expand its internal Composable AST sub-nodes from Kotlin source!
-        if self.composable_name and not self.children and not self.is_synthetic:
-            self._expand_internal_ast_subtree()
+    def can_deepen(self):
+        """True only if expand will reveal nodes we don't already show."""
+        if self.children and not self.expanded:
+            return True
+        self.ensure_source_resolved()
+        name = self._infer_composable_name()
+        if name and find_composable_definition(name)[0]:
+            # already showing that definition's kids?
+            if self._def_loaded and not self.children:
+                return False
+            if self._def_loaded and self.expanded:
+                return bool(self.children)
+            return True
+        return False
 
-    def _expand_internal_ast_subtree(self):
-        """Expands the internal layout tree of a Composable function."""
-        def_file, def_line = find_composable_definition(self.composable_name)
-        if not def_file and self.source_file:
-            def_file, def_line = self.source_file, int(self.source_line or 1)
+    def ensure_ast_children_expanded(self):
+        """Load this node's next hierarchy level from its @Composable definition."""
+        self.ensure_source_resolved()
+        if self._def_loaded:
+            return
+        self._def_loaded = True
 
-        if def_file and def_line:
-            subnodes = parse_composable_body_subnodes(def_file, def_line)
-            # Add up to 8 key internal child composables
-            for sub in subnodes[:8]:
-                if sub["name"] != self.composable_name:
-                    child_node = UINode(parent=self, depth=self.depth + 1, synthetic_info=sub)
-                    self.children.append(child_node)
+        name = self._infer_composable_name()
+        if name and name != self.composable_name:
+            self.composable_name = name
+
+        ast_roots = []
+        def_file = def_line = None
+        if name:
+            def_file, def_line = find_composable_definition(name)
+            if def_file and def_line:
+                ast_roots = parse_composable_block_at_line(def_file, def_line)
+
+        # Already a UINode built from this same function body — don't re-parse.
+        same_file_def = (
+            def_file
+            and self.source_file
+            and os.path.abspath(self.source_file) == os.path.abspath(def_file)
+            and self.is_synthetic
+            and self.children
+        )
+        if same_file_def:
+            return
+
+        if ast_roots:
+            self._adopt_ast_roots(ast_roots)
 
     def recalculate_depths(self, start_depth=0):
         self.depth = start_depth
@@ -298,6 +560,7 @@ class UINode:
             child.recalculate_depths(start_depth + 1)
 
     def get_layout_tag(self):
+        self.ensure_source_resolved()
         if self.composable_name:
             prefix = "" if not self.is_synthetic else "› "
             return f"{prefix}<{self.composable_name}>"
@@ -339,6 +602,7 @@ class UINode:
         return " ".join(parts)
 
     def full_info(self):
+        self.ensure_source_resolved()
         info = [f"Depth: L{self.depth}"]
         if self.composable_name:
             info.append(f"Component: <{self.composable_name}>")
@@ -362,7 +626,7 @@ class UINode:
 def find_compose_root(node):
     if not node:
         return None
-    if "ComposeView" in node.class_name or "compose" in node.res_id.lower() or node.composable_name:
+    if "ComposeView" in node.class_name or "compose" in node.res_id.lower():
         return node
     for child in node.children:
         found = find_compose_root(child)
@@ -370,12 +634,58 @@ def find_compose_root(node):
             return found
     return node
 
-def set_expand_depth(node, current_depth, max_depth):
+def set_expand_depth(node, current_depth, max_depth, ancestors=None):
     if not node:
         return
-    node.expanded = (current_depth < max_depth)
+    ancestors = list(ancestors or [])
+    node.ensure_ast_children_expanded()
+    node.expanded = current_depth < max_depth and bool(node.children)
+    if not node.expanded:
+        return
+    name = node.composable_name
+    nxt = ancestors + [name] if name else ancestors
     for child in node.children:
-        set_expand_depth(child, current_depth + 1, max_depth)
+        if child.composable_name and child.composable_name in ancestors:
+            continue
+        set_expand_depth(child, current_depth + 1, max_depth, nxt)
+
+
+def expand_to_max_depth(node, ancestors=None, hops=0):
+    """Lazily load and expand every descendant until definitions run out."""
+    if not node or hops > 48:
+        return 0
+    ancestors = list(ancestors or [])
+    node.ensure_ast_children_expanded()
+    if not node.children:
+        node.expanded = False
+        return 0
+    node.expanded = True
+    name = node.composable_name
+    nxt = ancestors + [name] if name else ancestors
+    opened = 1
+    for child in node.children:
+        if child.composable_name and child.composable_name in ancestors:
+            continue
+        opened += expand_to_max_depth(child, nxt, hops + 1)
+    return opened
+
+
+def toggle_node_stepwise(node):
+    """Expand one level, or collapse if already open."""
+    if not node:
+        return "No node selected."
+
+    node.ensure_ast_children_expanded()
+    label = node.get_layout_tag().strip("<>")
+
+    if not node.children:
+        return f"<{label}> is a leaf (no deeper layout)."
+
+    if not node.expanded:
+        node.expanded = True
+        return f"Expanded <{label}> ({len(node.children)} children)"
+    node.expanded = False
+    return f"Collapsed <{label}>"
 
 def fetch_ui_dump():
     cmd_env = os.environ.copy()
@@ -439,7 +749,7 @@ def run_tui(stdscr):
     status_msg = "Capturing UI hierarchy..."
     raw_root = None
     active_root = None
-    focus_compose_only = True  # Default to Focus Compose Root for best developer experience
+    focus_compose_only = True
     filter_query = ""
 
     def refresh_screen():
@@ -448,7 +758,8 @@ def run_tui(stdscr):
             resolve_composable_from_source.cache_clear()
             parse_kotlin_composable_chain.cache_clear()
             find_composable_definition.cache_clear()
-            parse_composable_body_subnodes.cache_clear()
+            parse_composable_block_at_line.cache_clear()
+            kotlin_source_files.cache_clear()
             
             path = fetch_ui_dump()
             tree = ET.parse(path)
@@ -460,10 +771,10 @@ def run_tui(stdscr):
                 dummy.append(c)
             
             raw_root = UINode(dummy, depth=0)
-            raw_root.propagate_hierarchy()
             
             update_active_view()
-            status_msg = f"Screen captured. Full Composable AST depth expanded. (Project: {os.path.basename(PROJECT_ROOT)})"
+            set_expand_depth(active_root, 0, 1)
+            status_msg = "Ready. [e] one level  [E] expand to max depth  [c] collapse  [Enter] Zed"
         except Exception as e:
             status_msg = f"ADB Error: {e}"
 
@@ -487,8 +798,8 @@ def run_tui(stdscr):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         
-        mode_tag = "[Focus: Compose]" if focus_compose_only else "[Focus: All Window]"
-        header = f" [Compose Deep Inspector] {mode_tag}  [r]: Refresh  [f]: Toggle Root  [1-9]: Depth  [e/c]: Expand/Collapse  [q]: Quit "
+        mode_tag = "[Compose Root]" if focus_compose_only else "[All Window]"
+        header = f" [Deep Inspector] {mode_tag}  [e] +1 level  [E] max depth  [c] collapse  [r] refresh  [q] "
         stdscr.addstr(0, 0, header[:w-1].ljust(w-1), curses.A_REVERSE | curses.A_BOLD)
         
         visible_items = flatten_tree(active_root, filter_query) if active_root else []
@@ -512,7 +823,8 @@ def run_tui(stdscr):
             node = visible_items[item_idx]
             depth_tag = f"L{node.depth:02d} "
             indent = " " * (node.depth * 2)
-            prefix = ("▼ " if node.expanded else "▶ ") if node.children else "• "
+            has_expandable_children = node.can_deepen() or (node.expanded and node.children)
+            prefix = ("▼ " if node.expanded else "▶ ") if has_expandable_children else "• "
             
             line_str = f"{depth_tag}{indent}{prefix}{node.display_text()}"
             is_selected = (item_idx == cursor_idx)
@@ -537,7 +849,7 @@ def run_tui(stdscr):
             stdscr.addstr(detail_y, 0, detail_str[:w-1].ljust(w-1), curses.color_pair(5) | curses.A_BOLD)
 
         status_y = h - 1
-        msg_color = curses.color_pair(3) if ("Opened" in status_msg or "captured" in status_msg) else curses.color_pair(4)
+        msg_color = curses.color_pair(3) if ("Opened" in status_msg or "Ready" in status_msg or "Expanded" in status_msg) else curses.color_pair(4)
         stdscr.addstr(status_y, 0, f" Status: {status_msg}"[:w-1].ljust(w-1), msg_color | curses.A_BOLD)
         
         stdscr.refresh()
@@ -567,29 +879,37 @@ def run_tui(stdscr):
                         if v_node == node.parent:
                             cursor_idx = idx
                             break
-        elif key in (curses.KEY_RIGHT, ord('l')):
+        elif key in (curses.KEY_RIGHT, ord('l'), ord(' ')):
             if visible_items and cursor_idx < len(visible_items):
                 node = visible_items[cursor_idx]
+                node.ensure_ast_children_expanded()
                 if not node.expanded and node.children:
                     node.expanded = True
-        elif key == ord(' '):
+                elif node.expanded and node.children:
+                    node.expanded = False
+        elif key == ord('e'):
+            if visible_items and cursor_idx < len(visible_items):
+                status_msg = toggle_node_stepwise(visible_items[cursor_idx])
+        elif key == ord('E'):
             if visible_items and cursor_idx < len(visible_items):
                 node = visible_items[cursor_idx]
-                node.expanded = not node.expanded
+                n = expand_to_max_depth(node)
+                label = node.get_layout_tag().strip("<>")
+                status_msg = f"Expanded <{label}> to max depth ({n} nodes opened)"
+        elif key in (ord('c'), ord('C')):  # 'c' collapses all
+            set_expand_depth(active_root, 0, 1)
+            cursor_idx = 0
+            scroll_offset = 0
+            status_msg = "Collapsed all nodes back to root."
         elif key == ord('f'):
             focus_compose_only = not focus_compose_only
             update_active_view()
+            set_expand_depth(active_root, 0, 1)
             status_msg = "Focused Compose application root." if focus_compose_only else "Showing full window hierarchy."
         elif ord('1') <= key <= ord('9'):
             target_depth = key - ord('0')
             set_expand_depth(active_root, 0, target_depth)
-            status_msg = f"Expanded tree up to Depth L{target_depth}."
-        elif key == ord('e'):
-            set_expand_depth(active_root, 0, 999)
-            status_msg = "Expanded all nodes to maximum depth."
-        elif key == ord('c'):
-            set_expand_depth(active_root, 0, 1)
-            status_msg = "Collapsed tree to root level."
+            status_msg = f"Expanded tree to Depth L{target_depth}."
         elif key == ord('r'):
             status_msg = "Refreshing screen dump..."
             stdscr.addstr(status_y, 0, f" Status: {status_msg}"[:w-1].ljust(w-1), curses.A_BOLD)
@@ -598,6 +918,7 @@ def run_tui(stdscr):
         elif key in (curses.KEY_ENTER, 10, 13, ord('o')):
             if visible_items and cursor_idx < len(visible_items):
                 node = visible_items[cursor_idx]
+                node.ensure_source_resolved()
                 if node.source_file and node.source_line:
                     status_msg = jump_to_ide(node.source_file, node.source_line)
                 else:
